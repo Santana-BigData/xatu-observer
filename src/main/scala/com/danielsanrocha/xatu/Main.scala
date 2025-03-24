@@ -8,7 +8,7 @@ import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import com.danielsanrocha.xatu.commons.Security
-import com.danielsanrocha.xatu.repositories.{LogRepository, LogRepositoryImpl}
+import com.danielsanrocha.xatu.repositories.{LogRepository, LogRepositoryDummyImpl, LogRepositoryImpl}
 import com.typesafe.config.{Config, ConfigFactory}
 
 import java.util.Scanner
@@ -42,11 +42,16 @@ object Main extends App {
     logging.info("Loading slick MySQLClient...")
     implicit val client: Database = Database.forConfig("mysql")
 
-    logging.info("Creating logs repository...")
-    implicit val logRepository: LogRepository = new LogRepositoryImpl("elasticsearch", ec)
-
     args(0) match {
       case "start" =>
+        logging.info("Creating logs repository...")
+        implicit val logRepository: LogRepository =
+          if (conf.getString("elasticsearch.active") == "true") {
+            new LogRepositoryImpl("elasticsearch", ec)
+          } else {
+            new LogRepositoryDummyImpl()
+          }
+
         logging.info(s"Instantiating the great manager...")
         implicit val greatManager: TheGreatManager = new TheGreatManager()
         greatManager.start()
@@ -73,6 +78,9 @@ object Main extends App {
         logging.info("Created!\n")
 
       case "createIndex" =>
+        logging.info("Creating logs repository...")
+        implicit val logRepository: LogRepository = new LogRepositoryImpl("elasticsearch", ec)
+
         logging.info("Creating index...")
         Await.result(logRepository.createIndex(), atMost = 10 second)
         logging.info("Created!\n")

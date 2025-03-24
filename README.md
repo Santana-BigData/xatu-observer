@@ -152,6 +152,7 @@ LOG_LEVEL=trace make test-integration-docker
 - ELASTIC_SEARCH_HOST: Host for elasticsearch.
 - ELASTIC_SEARCH_PORT: Port for elasticsearch.
 - ELASTIC_SEARCH_LOG_INDEX: elasticsearch index name. Need not be already created.
+- ELASTICSEARCH_ACTIVE: Set to "false" to deactivate ElasticSearch.
 - TELEGRAM_BOT_TOKEN: Token for telegram bot, do not set to deactivate telegram notifications.
 - TELEGRAM_CHAT_ID: Chat id for telegram bot.
 
