@@ -1,7 +1,7 @@
 .PHONY: help start assembly test clean start-docker test-integration-docker clean-docker version env
 SHELL := /bin/bash
 
-VERSION=3.2.0
+VERSION=3.2.1
 
 export ROOT_LOG_LEVEL ?= ERROR
 export LOG_LEVEL ?= INFO

@@ -43,7 +43,7 @@ jobs:
         run: sbt -v +assembly
       - name: Copy Jar
         shell: bash
-        run: cp target/scala-2.13/xatu-observer-assembly-3.2.0.jar xatu.jar
+        run: cp target/scala-2.13/xatu-observer-assembly-3.2.1.jar xatu.jar
       - name: Up docker-compose
         uses: blag/action-docker-compose@latest
         with:
