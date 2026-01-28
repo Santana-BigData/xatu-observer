@@ -30,7 +30,11 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   implicit val serviceRepository: ServiceRepository = new ServiceRepositoryImpl()
   implicit val apiRepository: APIRepository = new APIRepositoryImpl()
   implicit val containerRepository: ContainerRepository = new ContainerRepositoryImpl()
-  implicit val logRepository: LogRepository = new LogRepositoryImpl("elasticsearch", ec)
+  private implicit val conf: Config = ConfigFactory.load()
+
+  implicit val logRepository: LogRepository =
+    if (conf.getString("elasticsearch.active") == "true") new LogRepositoryImpl("elasticsearch", ec)
+    else new com.danielsanrocha.xatu.repositories.LogRepositoryDummyImpl()
 
   logging.info("Instantiating docker client...")
   implicit val dockerClient: DockerClient = DockerClientBuilder.getInstance.build
@@ -42,7 +46,6 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   private implicit val containerService: ContainerService = new ContainerServiceImpl()
 
   logging.info("Loading configuration file and accessing it...")
-  private implicit val conf: Config = ConfigFactory.load()
 
   logging.info("Instantiating Observers Managers...")
   private implicit val apiObserverManager: APIObserverManager = new APIObserverManager()
