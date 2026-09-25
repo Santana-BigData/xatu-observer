@@ -162,6 +162,8 @@ LOG_LEVEL=trace make test-integration-docker
 - ELASTIC_SEARCH_PORT: Port for elasticsearch.
 - ELASTIC_SEARCH_LOG_INDEX: elasticsearch index name. Need not be already created.
 - ELASTICSEARCH_ACTIVE: Set to "false" to deactivate ElasticSearch.
+- ELASTICSEARCH_USER: User for elasticsearch (basic auth), do not set if elasticsearch has no authentication.
+- ELASTICSEARCH_PASSWORD: Password for elasticsearch user.
 - TELEGRAM_BOT_TOKEN: Token for telegram bot, do not set to deactivate telegram notifications.
 - TELEGRAM_CHAT_ID: Chat id for telegram bot.
 - SERVER: Name of this server. When set, telegram notifications are prefixed with it (e.g. `[production] API xpto is broken!`) and it is saved in the `server` field of each log in elasticsearch.

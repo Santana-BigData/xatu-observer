@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.typesafe.scalalogging.Logger
 import com.typesafe.config.{Config, ConfigFactory}
-import scalaj.http.{Http, HttpOptions}
+import scalaj.http.{Http, HttpOptions, HttpRequest}
 
 import scala.concurrent.Future
 import scala.io.Source
@@ -23,9 +23,16 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
   private val esPort = conf.getString(s"$config.port")
   private val esIndex = conf.getString(s"$config.index")
   private val server = optionalString("server")
+  private val credentials = for {
+    user <- optionalString(s"$config.user")
+    password <- optionalString(s"$config.password")
+  } yield (user, password)
 
   private def optionalString(path: String): Option[String] =
     if (conf.hasPath(path)) Some(conf.getString(path)).filter(_.nonEmpty) else None
+
+  private def request(route: String): HttpRequest =
+    credentials.fold(Http(route)) { case (user, password) => Http(route).auth(user, password) }
 
   private val indexMapping = Source.fromResource("logIndex.json").mkString
 
@@ -34,7 +41,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
       try {
         val route = s"$esHost:$esPort/$esIndex"
         logging.info(s"Creating index at route $route")
-        val result = Http(route)
+        val result = request(route)
           .option(HttpOptions.connTimeout(10000))
           .option(HttpOptions.readTimeout(10000))
           .header("content-type", "application/json")
@@ -57,7 +64,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
     Future {
       val route = s"$esHost:$esPort/$esIndex/_doc/$documentId"
       logging.debug(s"Indexing log on route $route...")
-      val result = Http(route)
+      val result = request(route)
         .option(HttpOptions.connTimeout(10000))
         .option(HttpOptions.readTimeout(10000))
         .header("content-type", "application/json")
@@ -75,7 +82,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
     Future {
       val route = s"$esHost:$esPort/$esIndex/_doc/$documentId"
       logging.debug(s"Indexing log on route $route...")
-      val result = Http(route)
+      val result = request(route)
         .option(HttpOptions.connTimeout(10000))
         .option(HttpOptions.readTimeout(10000))
         .header("content-type", "application/json")
@@ -102,7 +109,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
 
       logging.debug(s"Search post data: $data")
 
-      val result = Http(route)
+      val result = request(route)
         .header("Content-Type", "application/json")
         .postData(data)
         .option(HttpOptions.connTimeout(10000))
@@ -144,7 +151,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
     logging.debug(s"Checking index on $route...")
 
     Future {
-      val result = Http(route)
+      val result = request(route)
         .option(HttpOptions.connTimeout(3000))
         .option(HttpOptions.readTimeout(3000))
         .execute()
