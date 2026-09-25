@@ -32,9 +32,11 @@ abstract class Manager[DATA <: Data, OBSERVER <: Observer[DATA]](service: Servic
           case Some(obs) =>
             logging.debug(s"Observer for '${obj.name}' already created")
             logging.debug(s"Checking for parameter changes DATA(${obj.id},${obj.name})")
-            if (obj != obs.getData) {
-              logging.debug(s"Updating parameters for (${obj.id}, ${obj.name})")
+            if (obj.configuration != obs.getData.configuration) {
+              logging.info(s"Configuration of (${obj.id}, ${obj.name}) changed, reloading observer...")
               obs.reload(obj)
+            } else {
+              obs.refresh(obj)
             }
           case None =>
             logging.info(s"Creating observer for DATA with id ${obj.id} and name ${obj.name}")

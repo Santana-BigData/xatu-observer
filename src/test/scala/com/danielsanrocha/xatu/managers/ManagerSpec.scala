@@ -114,6 +114,37 @@ class ManagerSpec extends UnitSpec with TestManager {
       }
     }
 
+    it("should only refresh, not reload, when the state changes but the configuration does not") {
+      val service = mock(classOf[Service[Data]])
+      val manager = new MockManager(service, ec)
+
+      val working = new StatefulData(3, "webmail", "/var/log/webmail", 'W')
+      val failed = new StatefulData(3, "webmail", "/var/log/webmail", 'F')
+      val moved = new StatefulData(3, "webmail", "/var/log/mail", 'F')
+
+      when(service.getAll(any, any)).thenReturn(Future(Seq(working)))
+
+      Future {
+        manager.task.run()
+        Thread.sleep(500)
+
+        when(service.getAll(any, any)).thenReturn(Future(Seq(failed)))
+        manager.task.run()
+        Thread.sleep(500)
+
+        val observer = manager.observers.get(3).head
+        observer.reloaded should equal(false)
+        observer.getData should equal(failed)
+
+        when(service.getAll(any, any)).thenReturn(Future(Seq(moved)))
+        manager.task.run()
+        Thread.sleep(500)
+
+        observer.reloaded should equal(true)
+        observer.getData should equal(moved)
+      }
+    }
+
     it("should delete old observers") {
       val service = mock(classOf[Service[Data]])
       val manager = new MockManager(service, ec)

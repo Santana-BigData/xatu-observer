@@ -15,7 +15,8 @@ class LogServiceObserver(s: Service, implicit val service: ServiceService, impli
 
   override def status(): Status = { LogServiceObserverStatus(_data.id, _data.name, files.keys.toSeq) }
 
-  override lazy val task: Runnable = () => {
+  // task (observer thread) and reload/stop (manager thread) share the open files
+  override lazy val task: Runnable = () => files.synchronized {
     logging.debug(s"Searching for files Service(${_data.id}, ${_data.name})...")
 
     val regex = raw"${_data.logFileRegex}".r
@@ -67,19 +68,18 @@ class LogServiceObserver(s: Service, implicit val service: ServiceService, impli
     }
   }
 
+  private def closeFiles(): Unit = files.synchronized {
+    files.values.foreach(_.close())
+    files.clear()
+  }
+
   override def reload(s: Service): Unit = {
     this._data = s
-    files.foreach { case (filename, b) =>
-      b.close()
-      files.remove(filename)
-    }
+    closeFiles()
   }
 
   override def stop(): Unit = {
     super.stop()
-    files.foreach { case (filename, b) =>
-      b.close()
-      files.remove(filename)
-    }
+    closeFiles()
   }
 }

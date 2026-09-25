@@ -7,6 +7,11 @@ import com.danielsanrocha.xatu.services.Service
 import scala.concurrent.ExecutionContext
 
 trait TestManager {
+  /** Data with state (status) that is not part of its configuration, like a Service row. */
+  class StatefulData(id: Long, name: String, val directory: String, val status: Char) extends Data(id, name) {
+    override def configuration: Any = (id, name, directory)
+  }
+
   class MockObserver(d: Data) extends Observer[Data](d) {
     override val task: Runnable = () => {}
 

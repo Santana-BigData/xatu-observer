@@ -11,4 +11,6 @@ case class Service(
     status: Char,
     createDate: Timestamp,
     updateDate: Timestamp
-) extends Data(id, name)
+) extends Data(id, name) {
+  override def configuration: Any = (id, name, logFileDirectory, logFileRegex, pidFile)
+}

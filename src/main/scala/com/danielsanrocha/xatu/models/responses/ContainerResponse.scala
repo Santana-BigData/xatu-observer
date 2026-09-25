@@ -13,4 +13,6 @@ case class ContainerResponse(
     updateDate: Timestamp
 ) extends Data(id, name) {
   def container: Container = Container(id, name, createDate, updateDate)
+
+  override def configuration: Any = (id, name, info)
 }

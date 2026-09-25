@@ -16,6 +16,11 @@ abstract class Observer[DATA <: Data](d: DATA) {
     _data = data
   }
 
+  /** Keeps the latest row (status, dates) without reloading anything. */
+  def refresh(data: DATA): Unit = {
+    _data = data
+  }
+
   def status(): Status = {
     SimpleStatus(_data.id, _data.name)
   }
