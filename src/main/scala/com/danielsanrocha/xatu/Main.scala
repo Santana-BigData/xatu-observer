@@ -7,8 +7,8 @@ import scala.io.Source
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import com.danielsanrocha.xatu.commons.Security
-import com.danielsanrocha.xatu.repositories.{LogRepository, LogRepositoryDummyImpl, LogRepositoryImpl}
+import com.danielsanrocha.xatu.commons.{CassandraMigrator, Security}
+import com.danielsanrocha.xatu.repositories.{CassandraSession, LogRepository, LogRepositoryDummyImpl, LogRepositoryImpl}
 import com.typesafe.config.{Config, ConfigFactory}
 
 import java.util.Scanner
@@ -21,6 +21,7 @@ object Main extends App {
   start: Start the server.
   createTables: Create tables on the database.
   createIndex: Create ES index for logs.
+  cassandraMigrate: Create/update the cassandra schema (src/main/resources/cassandra).
   createUser: Create an user, you will be prompt for the info.
 
   """
@@ -38,6 +39,27 @@ object Main extends App {
 
   if (args.length == 0) {
     println(usage)
+  } else if (args(0) == "cassandraMigrate") {
+    // does not need mysql, so it runs before the database pool is created
+    val keyspace = conf.getString("cassandra.keyspace")
+    val cassandra = CassandraSession.fromConfig(conf, withKeyspace = false)
+    val exitCode = cassandra.session match {
+      case None =>
+        logging.error("Could not connect to cassandra, check CASSANDRA_CONTACT_POINTS and CASSANDRA_DATACENTER.")
+        1
+      case Some(session) =>
+        try {
+          val applied = CassandraMigrator.migrate(session, keyspace, conf.getInt("cassandra.replication_factor"))
+          logging.info(if (applied.isEmpty) s"Keyspace $keyspace is up to date.\n" else s"Applied ${applied.map(_.file).mkString(", ")}.\n")
+          0
+        } catch {
+          case e: Throwable =>
+            logging.error(s"Error applying cassandra migrations: ${e.getMessage}")
+            1
+        }
+    }
+    cassandra.close()
+    sys.exit(exitCode)
   } else {
     logging.info("Loading slick MySQLClient...")
     implicit val client: Database = Database.forConfig("mysql")
