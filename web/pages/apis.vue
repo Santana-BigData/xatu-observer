@@ -30,15 +30,7 @@
           <strong>Host</strong>: {{ api.host }} <br />
           <strong>Port</strong>: {{ api.port }}<br />
           <strong>HealthcheckRoute</strong>: {{ api.healthcheck_route }}<br />
-          <strong>Status</strong>:
-          <span
-            v-if="api.status === 'W'"
-            style="color: green"
-          >Working</span>
-          <span
-            v-else
-            style="color: red"
-          >Failure</span>
+          <ServerStatus :status="api.status" :servers="api.servers" />
           <br />
         </v-card-text>
       </v-card>

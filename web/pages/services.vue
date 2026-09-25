@@ -13,9 +13,7 @@
           <strong>pidFile</strong>: {{ service.pid_file }} <br />
           <strong>logFileDirectory</strong>: {{ service.log_file_directory }}<br />
           <strong>logFileRegex</strong>: {{ service.log_file_regex }}<br />
-          <strong>Status</strong>:
-          <span v-if="service.status === 'W'" style="color: green">Working</span>
-          <span v-else style="color: red">Failure</span>
+          <ServerStatus :status="service.status" :servers="service.servers" />
         </v-card-text>
       </v-card>
 

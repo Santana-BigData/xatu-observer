@@ -30,15 +30,7 @@
             <strong>ImageName</strong>: {{ container.info.image_name }} <br />
             <strong>ContainerId</strong>: {{ container.info.container_id }} <br />
           </div>
-          <strong>Status</strong>:
-          <span
-            v-if="container.status === 'W'"
-            style="color: green"
-          >Working</span>
-          <span
-            v-else
-            style="color: red"
-          >Failure</span>
+          <ServerStatus :status="container.status" :servers="container.servers" />
         </v-card-text>
       </v-card>
 
