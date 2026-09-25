@@ -127,6 +127,7 @@
 <script>
 import client from '../commons/client'
 import MD5 from '../commons/MD5'
+import { hue } from '../commons/serverColor'
 
 export default {
   name: 'LogsPage',
@@ -172,9 +173,7 @@ export default {
       return 'info'
     },
     tagStyle(name) {
-      // Same name always gets the same color, so servers/sources are easy to tell apart
-      let h = 0
-      for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360
+      const h = hue(name)
       return {
         color: `hsl(${h}, 80%, 75%)`,
         backgroundColor: `hsla(${h}, 70%, 45%, 0.18)`,

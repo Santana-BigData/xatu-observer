@@ -31,6 +31,9 @@
               <v-icon>mdi-math-log</v-icon>&nbsp;<a href="/logs">Logs</a>
             </v-list-item>
             <v-list-item>
+              <v-icon>mdi-chart-line</v-icon>&nbsp;<a href="/metrics">Metrics</a>
+            </v-list-item>
+            <v-list-item>
               <v-icon>mdi-logout</v-icon>&nbsp;<button @click="logout">Logout</button>
             </v-list-item>
           </v-list>
