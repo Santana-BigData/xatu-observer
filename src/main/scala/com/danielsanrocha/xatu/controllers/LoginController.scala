@@ -33,8 +33,8 @@ class LoginController(implicit val service: UserService, implicit val cachePool:
             val credentialJson = jsonMapper.writeValueAsString(timedCredential)
             val token = Security.hash(credentialJson)
             val cache = cachePool.getResource
-            val r1 = cache.set(s"token:$token", credentialJson)
-            val r2 = cache.expire(s"token:${token}", ttl.value)
+            val r1 = cache.set(s"xatu::token::$token", credentialJson)
+            val r2 = cache.expire(s"xatu::token::$token", ttl.value)
             cache.close()
 
             logging.debug(s"(x-request-id - $requestId) Returning token")

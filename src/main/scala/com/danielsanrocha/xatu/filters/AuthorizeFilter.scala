@@ -36,7 +36,7 @@ class AuthorizeFilter(authorizationHeader: String, implicit val cachePool: Pool[
       case Some(header) =>
         val cache = cachePool.getResource
         val start = System.currentTimeMillis
-        cache.get(s"token:$header") match {
+        cache.get(s"xatu::token::$header") match {
           case null =>
             cache.close()
             logging.debug(s"(x-request-id - ${requestId}) User sent header Authorization: which do not exist on the cache server!")
