@@ -41,7 +41,4 @@ class APIServiceImpl(implicit repository: APIRepository, implicit val ec: scala.
     repository.getAll(limit, offset)
   }
 
-  override def setStatus(id: Long, status: Char): Future[Unit] = {
-    repository.setStatus(id, status) map { _ => }
-  }
 }

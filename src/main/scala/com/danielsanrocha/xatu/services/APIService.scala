@@ -9,5 +9,4 @@ trait APIService extends Service[API] {
   def create(service: NewAPI): Future[Long]
   def delete(id: Long): Future[Boolean]
   def update(id: Long, s: NewAPI): Future[Boolean]
-  def setStatus(id: Long, status: Char): Future[Unit]
 }

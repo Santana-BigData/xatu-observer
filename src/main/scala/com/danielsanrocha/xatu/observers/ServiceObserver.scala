@@ -1,12 +1,12 @@
 package com.danielsanrocha.xatu.observers
 
-import com.danielsanrocha.xatu.models.internals.Service
-import com.danielsanrocha.xatu.services.ServiceService
+import com.danielsanrocha.xatu.models.internals.{CheckKind, ServerCheck, Service}
+import com.danielsanrocha.xatu.repositories.StatusRepository
 import com.typesafe.scalalogging.Logger
 
 import java.io.{BufferedReader, InputStreamReader}
 
-class ServiceObserver(s: Service, implicit val service: ServiceService) extends Observer[Service](s) {
+class ServiceObserver(s: Service, server: String, statusRepository: StatusRepository) extends Observer[Service](s) {
   private val logging: Logger = Logger(this.getClass)
 
   // avoids logging "not reporting" every 10 seconds
@@ -33,7 +33,7 @@ class ServiceObserver(s: Service, implicit val service: ServiceService) extends 
           if (!reporting) logging.info(s"Service ${_data.name} is enabled on this server again, reporting its status.")
           reporting = true
           logging.debug(s"Service ${_data.name} status $status")
-          service.setStatus(_data.id, status)
+          save(status, if (status == 'F') Some(active) else None)
         case None =>
           if (reporting) logging.info(s"Service ${_data.name} is not enabled on this server, not reporting its status.")
           reporting = false
@@ -41,9 +41,12 @@ class ServiceObserver(s: Service, implicit val service: ServiceService) extends 
     } catch {
       case e: Exception =>
         logging.error(s"Error retrieving service ${_data.name} status. Message:${e.getMessage}. Setting status to F...")
-        service.setStatus(_data.id, 'F')
+        save('F', Option(e.getMessage))
     }
   }
+
+  private def save(status: Char, message: Option[String]): Unit =
+    statusRepository.save(ServerCheck(CheckKind.Service, _data.id, server, status, message, System.currentTimeMillis()))
 }
 
 object ServiceObserver {

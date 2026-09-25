@@ -1,6 +1,6 @@
 package com.danielsanrocha.xatu.models.responses
 
-import com.danielsanrocha.xatu.models.internals.{Container, ContainerInfo, Data}
+import com.danielsanrocha.xatu.models.internals.{Container, ContainerInfo, Data, ServerCheck}
 
 import java.sql.Timestamp
 
@@ -10,7 +10,8 @@ case class ContainerResponse(
     info: Option[ContainerInfo],
     status: Char,
     createDate: Timestamp,
-    updateDate: Timestamp
+    updateDate: Timestamp,
+    servers: Seq[ServerCheck] = Seq()
 ) extends Data(id, name) {
   def container: Container = Container(id, name, createDate, updateDate)
 

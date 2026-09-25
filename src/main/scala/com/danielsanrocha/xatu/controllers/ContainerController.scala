@@ -5,12 +5,15 @@ import com.twitter.finagle.http.Request
 import com.twitter.finatra.http.Controller
 import com.typesafe.scalalogging.Logger
 
-import com.danielsanrocha.xatu.models.internals.{NewContainer, RequestId}
+import com.danielsanrocha.xatu.commons.StatusRules
+import com.danielsanrocha.xatu.models.internals.{CheckKind, NewContainer, RequestId}
 import com.danielsanrocha.xatu.models.requests.{GetAll, Id, ServiceRequest}
 import com.danielsanrocha.xatu.models.responses.{Created, Deleted, HitsResult, ServerMessage}
+import com.danielsanrocha.xatu.repositories.StatusRepository
 import com.danielsanrocha.xatu.services.ContainerService
 
-class ContainerController(implicit service: ContainerService, implicit val ec: scala.concurrent.ExecutionContext) extends Controller {
+class ContainerController(implicit service: ContainerService, implicit val statusRepository: StatusRepository, implicit val ec: scala.concurrent.ExecutionContext)
+    extends Controller {
   private val logging: Logger = Logger(this.getClass)
 
   get("/api/container/:id") { id: Id =>
@@ -41,7 +44,13 @@ class ContainerController(implicit service: ContainerService, implicit val ec: s
   get("/api/containers") { request: GetAll =>
     service.getAll(request.limit, request.offset) map { containers =>
       {
-        response.ok(HitsResult(containers.length, containers))
+        // status comes from the servers where each container exists, not from the local docker
+        val checks = statusRepository.checks(CheckKind.Container)
+        val withStatus = containers.map { c =>
+          val servers = checks.getOrElse(c.id, Seq()).sortBy(_.server)
+          c.copy(status = StatusRules.aggregate(CheckKind.Container, servers), servers = servers)
+        }
+        response.ok(HitsResult(withStatus.length, withStatus))
       }
     }
   }

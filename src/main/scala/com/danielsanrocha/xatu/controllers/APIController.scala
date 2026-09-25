@@ -1,21 +1,23 @@
 package com.danielsanrocha.xatu.controllers
 
-import com.danielsanrocha.xatu.models.internals.{NewAPI, RequestId}
+import com.danielsanrocha.xatu.models.internals.{CheckKind, NewAPI, RequestId}
 import com.danielsanrocha.xatu.models.requests.{GetAll, Id, APIRequest}
-import com.danielsanrocha.xatu.models.responses.{Created, Deleted, HitsResult, ServerMessage}
+import com.danielsanrocha.xatu.models.responses.{APIResponse, Created, Deleted, HitsResult, ServerMessage}
+import com.danielsanrocha.xatu.repositories.StatusRepository
 import com.danielsanrocha.xatu.services.{APIService}
 import com.twitter.finagle.context.Contexts
 import com.twitter.finatra.http.Controller
 import com.typesafe.scalalogging.Logger
 
-class APIController(implicit service: APIService, implicit val ec: scala.concurrent.ExecutionContext) extends Controller {
+class APIController(implicit service: APIService, implicit val statusRepository: StatusRepository, implicit val ec: scala.concurrent.ExecutionContext)
+    extends Controller {
   private val logging: Logger = Logger(this.getClass)
 
   get("/api/api/:id") { id: Id =>
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) GET api route called...")
     service.getById(id.id) map {
-      case Some(api) => response.ok(api)
+      case Some(api) => response.ok(APIResponse(api, statusRepository.checks(CheckKind.API)))
       case None      => response.notFound(ServerMessage(s"API with ${id.id} not found", requestId))
     }
   }
@@ -49,7 +51,8 @@ class APIController(implicit service: APIService, implicit val ec: scala.concurr
   get("/api/apis") { request: GetAll =>
     service.getAll(request.limit, request.offset) map { apis =>
       {
-        response.ok(HitsResult(apis.length, apis))
+        val checks = statusRepository.checks(CheckKind.API)
+        response.ok(HitsResult(apis.length, apis.map(APIResponse(_, checks))))
       }
     }
   }

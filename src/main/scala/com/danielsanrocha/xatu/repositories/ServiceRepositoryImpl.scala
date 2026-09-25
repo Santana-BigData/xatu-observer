@@ -50,8 +50,4 @@ class ServiceRepositoryImpl(implicit client: Database, implicit val ec: scala.co
   override def getAll(limit: Long, offset: Long): Future[Seq[Service]] = {
     client.run(services.take(limit).drop(offset).result)
   }
-
-  override def setStatus(id: Long, status: Char): Future[Int] = {
-    client.run(services.filter(_.id === id).map(s => (s.status)).update(status))
-  }
 }

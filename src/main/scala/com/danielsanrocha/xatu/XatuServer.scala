@@ -1,6 +1,5 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.RedisPool
 import com.danielsanrocha.xatu.controllers._
 import com.danielsanrocha.xatu.filters.{AuthorizeFilter, CORSFilter, ExceptionHandlerFilter, RequestIdFilter, TimeoutFilter}
 import com.danielsanrocha.xatu.models.internals.TTL
@@ -36,9 +35,9 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
 
   override def disableAdminHttpServer = true
 
-  logging.info("Connecting to redis...")
   private implicit val redisTTL: TTL = TTL(conf.getInt("redis.ttl"))
-  implicit val cache: Pool[Jedis] = RedisPool.create(conf)
+  implicit val cache: Pool[Jedis] = greatManager.cache
+  private implicit val statusRepository: StatusRepository = greatManager.statusRepository
 
   logging.info("Instantiating docker client...")
   implicit val dockerClient: DockerClient = DockerClientBuilder.getInstance.build

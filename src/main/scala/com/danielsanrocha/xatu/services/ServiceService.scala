@@ -9,5 +9,4 @@ trait ServiceService extends Service[ServiceModel] {
   def create(service: NewService): Future[Long]
   def delete(id: Long): Future[Boolean]
   def update(id: Long, s: NewService): Future[Boolean]
-  def setStatus(id: Long, status: Char): Future[Unit]
 }

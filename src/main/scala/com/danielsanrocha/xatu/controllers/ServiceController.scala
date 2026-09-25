@@ -1,22 +1,24 @@
 package com.danielsanrocha.xatu.controllers
 
-import com.danielsanrocha.xatu.models.internals.{NewService, RequestId}
+import com.danielsanrocha.xatu.models.internals.{CheckKind, NewService, RequestId}
 import com.danielsanrocha.xatu.models.requests.{GetAll, Id, ServiceRequest}
-import com.danielsanrocha.xatu.models.responses.{Created, Deleted, HitsResult, ServerMessage}
+import com.danielsanrocha.xatu.models.responses.{Created, Deleted, HitsResult, ServerMessage, ServiceResponse}
+import com.danielsanrocha.xatu.repositories.StatusRepository
 import com.danielsanrocha.xatu.services.ServiceService
 import com.twitter.finagle.context.Contexts
 import com.twitter.finagle.http.Request
 import com.twitter.finatra.http.Controller
 import com.typesafe.scalalogging.Logger
 
-class ServiceController(implicit service: ServiceService, implicit val ec: scala.concurrent.ExecutionContext) extends Controller {
+class ServiceController(implicit service: ServiceService, implicit val statusRepository: StatusRepository, implicit val ec: scala.concurrent.ExecutionContext)
+    extends Controller {
   private val logging: Logger = Logger(this.getClass)
 
   get("/api/service/:id") { id: Id =>
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) GET service route called...")
     service.getById(id.id) map {
-      case Some(service) => response.ok(service)
+      case Some(service) => response.ok(ServiceResponse(service, statusRepository.checks(CheckKind.Service)))
       case None          => response.notFound(ServerMessage(s"Service with ${id.id} not found", requestId))
     }
   }
@@ -50,7 +52,8 @@ class ServiceController(implicit service: ServiceService, implicit val ec: scala
   get("/api/services") { request: GetAll =>
     service.getAll(request.limit, request.offset) map { services =>
       {
-        response.ok(HitsResult(services.length, services))
+        val checks = statusRepository.checks(CheckKind.Service)
+        response.ok(HitsResult(services.length, services.map(ServiceResponse(_, checks))))
       }
     }
   }

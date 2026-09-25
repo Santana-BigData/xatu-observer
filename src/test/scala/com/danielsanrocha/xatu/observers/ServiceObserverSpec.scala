@@ -1,10 +1,11 @@
 package com.danielsanrocha.xatu.observers
 
 import com.danielsanrocha.xatu.UnitSpec
-import com.danielsanrocha.xatu.models.internals.Service
-import com.danielsanrocha.xatu.services.ServiceService
-import org.mockito.ArgumentMatchers.{any, anyChar, anyLong}
-import org.mockito.Mockito.{never, times, verify, when}
+import com.danielsanrocha.xatu.models.internals.{ServerCheck, Service}
+import com.danielsanrocha.xatu.repositories.StatusRepository
+import org.mockito.ArgumentCaptor
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{never, times, verify}
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.sql.Timestamp
@@ -46,27 +47,28 @@ class ServiceObserverSpec extends UnitSpec {
   }
 
   describe("task") {
-    class FakeSystemctl(service: ServiceService, answers: Map[String, String]) extends ServiceObserver(webmail, service) {
+    class FakeSystemctl(repository: StatusRepository, answers: Map[String, String]) extends ServiceObserver(webmail, "wl3-big-server-4", repository) {
       override protected def systemctl(args: String*): String = answers(args.head)
     }
 
-    it("should save the status when the service is expected to run") {
-      val service = mock[ServiceService]
-      when(service.setStatus(anyLong(), anyChar())).thenReturn(Future.successful(1))
-      new FakeSystemctl(service, Map("is-active" -> "inactive", "is-enabled" -> "enabled")).task.run()
+    it("should save the status of this server when the service is expected to run") {
+      val repository = mock[StatusRepository]
+      new FakeSystemctl(repository, Map("is-active" -> "failed", "is-enabled" -> "enabled")).task.run()
 
       Future {
-        verify(service, times(1)).setStatus(34, 'F')
-        succeed
+        val saved: ArgumentCaptor[ServerCheck] = ArgumentCaptor.forClass(classOf[ServerCheck])
+        verify(repository, times(1)).save(saved.capture())
+        val check = saved.getValue
+        (check.kind, check.targetId, check.server, check.status, check.message) should equal(("service", 34L, "wl3-big-server-4", 'F', Some("failed")))
       }
     }
 
     it("should not save anything when the service is disabled on this server") {
-      val service = mock[ServiceService]
-      new FakeSystemctl(service, Map("is-active" -> "inactive", "is-enabled" -> "disabled")).task.run()
+      val repository = mock[StatusRepository]
+      new FakeSystemctl(repository, Map("is-active" -> "inactive", "is-enabled" -> "disabled")).task.run()
 
       Future {
-        verify(service, never()).setStatus(anyLong(), anyChar())
+        verify(repository, never()).save(any())
         succeed
       }
     }

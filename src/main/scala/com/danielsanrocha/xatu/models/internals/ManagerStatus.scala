@@ -8,5 +8,8 @@ case class ManagerStatus(
     @JsonProperty("service_observer_manager") val serviceObserverManager: Seq[Status],
     @JsonProperty("log_container_manager") val logContainerManager: Seq[Status],
     @JsonProperty("threads") numberOfThreads: Int,
-    @JsonProperty("memory_usage") memoryUsage: Int
+    @JsonProperty("memory_usage") memoryUsage: Int,
+    @JsonProperty("server") server: String,
+    @JsonProperty("leader") leader: Option[String],
+    @JsonProperty("servers") servers: Seq[XatuServerInfo]
 )

@@ -47,8 +47,4 @@ class APIRepositoryImpl(implicit client: Database, implicit val ec: scala.concur
   override def getAll(limit: Long, offset: Long): Future[Seq[API]] = {
     client.run(apis.take(limit).drop(offset).result)
   }
-
-  override def setStatus(id: Long, status: Char): Future[Int] = {
-    client.run(apis.filter(_.id === id).map(api => (api.status)).update(status))
-  }
 }

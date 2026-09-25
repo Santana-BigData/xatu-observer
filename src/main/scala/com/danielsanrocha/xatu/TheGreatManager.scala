@@ -1,6 +1,6 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.SystemMetricsReader
+import com.danielsanrocha.xatu.commons.{RedisPool, SystemMetricsReader}
 import com.danielsanrocha.xatu.controllers.{MetricsController, StatusController}
 import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
@@ -16,6 +16,8 @@ import com.danielsanrocha.xatu.repositories.{
   CassandraSession,
   ServiceRepository,
   ServiceRepositoryImpl,
+  StatusRepository,
+  StatusRepositoryImpl,
   UserRepository,
   UserRepositoryImpl
 }
@@ -24,6 +26,8 @@ import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.core.DockerClientBuilder
 import com.typesafe.scalalogging.Logger
 import com.typesafe.config.{Config, ConfigFactory}
+import redis.clients.jedis.Jedis
+import redis.clients.jedis.util.Pool
 import slick.jdbc.MySQLProfile.api._
 import scala.concurrent.ExecutionContext
 
@@ -40,6 +44,18 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   implicit val logRepository: LogRepository =
     if (conf.getString("elasticsearch.active") == "true") new LogRepositoryImpl("elasticsearch", ec)
     else new com.danielsanrocha.xatu.repositories.LogRepositoryDummyImpl()
+
+  /** Name of this Xatu in the checks, alerts and metrics: SERVER env var or hostname. */
+  val server: String =
+    (if (conf.hasPath("server")) Some(conf.getString("server")).filter(_.nonEmpty) else None)
+      .getOrElse(java.net.InetAddress.getLocalHost.getHostName)
+
+  logging.info("Connecting to redis...")
+  implicit val cache: Pool[Jedis] = RedisPool.create(conf)
+
+  private val clusterPeriod = conf.getLong("cluster.period_seconds")
+  implicit val statusRepository: StatusRepository = new StatusRepositoryImpl(cache, conf.getLong("cluster.status_ttl_seconds"))
+  val leaderElection = new LeaderElection(server, statusRepository, clusterPeriod)
 
   logging.info("Creating metrics repository...")
   implicit val metricsRepository: MetricsRepository =
@@ -58,32 +74,40 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   logging.info("Loading configuration file and accessing it...")
 
   logging.info("Instantiating Observers Managers...")
-  private implicit val apiObserverManager: APIObserverManager = new APIObserverManager()
+  private implicit val apiObserverManager: APIObserverManager = new APIObserverManager(server, statusRepository)
   private implicit val logServiceManager: LogServiceObserverManager = new LogServiceObserverManager()
-  private implicit val serviceObserverManager: ServiceObserverManager = new ServiceObserverManager()
+  private implicit val serviceObserverManager: ServiceObserverManager = new ServiceObserverManager(server, statusRepository)
   private implicit val logContainerManager: LogContainerObserverManager = new LogContainerObserverManager()
 
   private val managersEnable = conf.getBoolean("managers.enabled")
 
   private val token = conf.getString("telegram.bot_token")
-  private val server = if (conf.hasPath("server")) Some(conf.getString("server")).filter(_.nonEmpty) else None
   val metricsInterval: Int = conf.getInt("metrics.interval_seconds")
 
   def start(): Unit = {
+    logging.info(s"Starting as server $server...")
+    new ServerHeartbeat(server, statusRepository, clusterPeriod).start()
+    leaderElection.start()
+
     if (token != "inactive") {
-      logging.info("Starting TelegramNotifier...")
-
-      val chatId = conf.getString("telegram.chat_id")
-      val telegramNotifier = new TelegramNotifier(token = token, chatId = chatId, containerService, apiService, serviceService, ec, server)
-
-      telegramNotifier.start()
+      logging.info("Starting TelegramNotifier (only the leader sends)...")
+      new TelegramNotifier(
+        token,
+        conf.getString("telegram.chat_id"),
+        leaderElection,
+        statusRepository,
+        serviceRepository,
+        apiRepository,
+        containerRepository,
+        conf.getLong("telegram.repeat_minutes")
+      ).start()
     } else {
       logging.info("Telegram token is to inactive.")
     }
 
     if (metricsRepository.active) {
       val reader = new SystemMetricsReader(
-        server = server.getOrElse(java.net.InetAddress.getLocalHost.getHostName),
+        server = server,
         netInterfaces = conf.getString("metrics.net_interfaces").split(",").map(_.trim).filter(_.nonEmpty).toSeq,
         diskPath = conf.getString("metrics.disk_path")
       )
@@ -98,9 +122,10 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
       logServiceManager.start()
       serviceObserverManager.start()
       logContainerManager.start()
+      new ContainerStatusCollector(server, containerRepository, dockerClient, statusRepository, clusterPeriod).start()
     }
   }
 
-  val statusController = new StatusController()
+  val statusController = new StatusController(server)
   val metricsController = new MetricsController(metricsInterval)
 }
