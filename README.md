@@ -48,6 +48,14 @@ java -jar xatu.jar createTables
 java -jar xatu.jar createIndex
 ```
 
+To collect server metrics (cpu, memory, disk, network and load, one sample per minute, kept for 7 days) you also need cassandra (version >= 4.0). Set the `CASSANDRA_*` variables below and create the schema with
+
+```bash
+java -jar xatu.jar cassandraMigrate
+```
+
+The schema is versioned in `src/main/resources/cassandra/V<number>__<name>.cql`. Each file is applied once, in order, and recorded in the `schema_version` table of the keyspace, so running `cassandraMigrate` again only applies new files. To change the schema, add a new file with the next version; never edit a file that was already applied. The charts are in the "Metrics" page of the web interface.
+
 You can start the server with
 
 ```bash
@@ -167,7 +175,18 @@ LOG_LEVEL=trace make test-integration-docker
 - ELASTICSEARCH_PASSWORD: Password for elasticsearch user.
 - TELEGRAM_BOT_TOKEN: Token for telegram bot, do not set to deactivate telegram notifications.
 - TELEGRAM_CHAT_ID: Chat id for telegram bot.
-- SERVER: Name of this server. When set, telegram notifications are prefixed with it (e.g. `[production] API xpto is broken!`) and it is saved in the `server` field of each log in elasticsearch.
+- CASSANDRA_ACTIVE: Set to "true" to save server metrics in cassandra (default "false").
+- CASSANDRA_CONTACT_POINTS: Comma separated list of cassandra hosts (default `127.0.0.1`).
+- CASSANDRA_PORT: Port for cassandra (default 9042).
+- CASSANDRA_KEYSPACE: Keyspace for Xatu tables (default `xatu`).
+- CASSANDRA_DATACENTER: Local datacenter of the cluster (default `datacenter1`).
+- CASSANDRA_REPLICATION_FACTOR: Replication factor used by `cassandraMigrate` when creating the keyspace (default 3).
+- CASSANDRA_TIMEOUT_MS: Timeout for cassandra requests (default 5000).
+- CASSANDRA_USER / CASSANDRA_PASSWORD: Credentials, do not set if cassandra has no authentication.
+- METRICS_INTERVAL_SECONDS: Seconds between two metrics samples (default 60).
+- METRICS_NET_INTERFACES: Comma separated network interfaces summed in the network chart. Empty (default) = all physical interfaces, which leaves out loopback, docker bridges, veth and vpn tunnels.
+- METRICS_DISK_PATH: Path whose filesystem is used for disk usage (default `/`).
+- SERVER: Name of this server. When set, telegram notifications are prefixed with it (e.g. `[production] API xpto is broken!`), it is saved in the `server` field of each log in elasticsearch and it names the server metrics (hostname when not set).
 
 ## Tips
 
