@@ -31,7 +31,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
       val randomCapture: ArgumentCaptor[String] = ArgumentCaptor.forClass(classOf[String])
       when(cachePool.getResource).thenReturn(cache)
       when(cache.set(anyString(), randomCapture.capture)).thenReturn("OK")
-      when(cache.get("random")).thenAnswer(_ => randomCapture.getValue)
+      when(cache.get("xatu::random")).thenAnswer(_ => randomCapture.getValue)
 
       when(logRepository.status()).thenReturn(Future())
 
@@ -59,7 +59,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
       implicit val logRepository: LogRepository = mock[LogRepository]
 
       when(cache.set(anyString(), anyString())).thenReturn("OK")
-      when(cache.get("random")).thenAnswer(_ => "1234")
+      when(cache.get("xatu::random")).thenAnswer(_ => "1234")
       when(cachePool.getResource).thenReturn(cache)
 
       when(logRepository.status()).thenReturn(Future())
@@ -87,7 +87,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
       implicit val logRepository: LogRepository = mock[LogRepository]
 
       when(cache.set(anyString(), anyString())).thenReturn("OK")
-      when(cache.get("random")).thenThrow(new JedisException("Not working..."))
+      when(cache.get("xatu::random")).thenThrow(new JedisException("Not working..."))
       when(cachePool.getResource).thenReturn(cache)
 
       when(logRepository.status()).thenReturn(Future())
@@ -142,7 +142,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
       val randomCapture: ArgumentCaptor[String] = ArgumentCaptor.forClass(classOf[String])
       when(cachePool.getResource).thenReturn(cache)
       when(cache.set(anyString(), randomCapture.capture)).thenReturn("OK")
-      when(cache.get("random")).thenAnswer(_ => randomCapture.getValue)
+      when(cache.get("xatu::random")).thenAnswer(_ => randomCapture.getValue)
 
       when(logRepository.status()).thenReturn(Future {
         throw new Exception("jujuba")
@@ -174,7 +174,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
       val randomCapture: ArgumentCaptor[String] = ArgumentCaptor.forClass(classOf[String])
       when(cachePool.getResource).thenReturn(cache)
       when(cache.set(anyString(), randomCapture.capture)).thenReturn("OK")
-      when(cache.get("random")).thenAnswer(_ => randomCapture.getValue)
+      when(cache.get("xatu::random")).thenAnswer(_ => randomCapture.getValue)
 
       when(logRepository.status()).thenReturn(Future())
 
