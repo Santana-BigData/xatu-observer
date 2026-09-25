@@ -10,7 +10,8 @@ import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatestplus.mockito.MockitoSugar.mock
-import redis.clients.jedis.{Jedis, JedisPool}
+import redis.clients.jedis.Jedis
+import redis.clients.jedis.util.Pool
 import redis.clients.jedis.exceptions.{JedisException, JedisConnectionException}
 
 import java.util.concurrent.TimeUnit
@@ -24,7 +25,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
   describe("GET /api/healthcheck") {
     it("should return ok if all repositories are ok") {
       val cache: Jedis = mock[Jedis]
-      implicit val cachePool: JedisPool = mock[JedisPool]
+      implicit val cachePool: Pool[Jedis] = mock[Pool[Jedis]]
       implicit val dockerClient: DockerClient = mock[DockerClient]
       implicit val logRepository: LogRepository = mock[LogRepository]
 
@@ -54,7 +55,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
 
     it("should return 500 if redis is misbehaving") {
       val cache: Jedis = mock[Jedis]
-      implicit val cachePool: JedisPool = mock[JedisPool]
+      implicit val cachePool: Pool[Jedis] = mock[Pool[Jedis]]
       implicit val dockerClient: DockerClient = mock[DockerClient]
       implicit val logRepository: LogRepository = mock[LogRepository]
 
@@ -81,7 +82,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
     }
 
     it("should return 500 if redis throws an exception") {
-      implicit val cachePool: JedisPool = mock[JedisPool]
+      implicit val cachePool: Pool[Jedis] = mock[Pool[Jedis]]
       implicit val cache: Jedis = mock[Jedis]
       implicit val dockerClient: DockerClient = mock[DockerClient]
       implicit val logRepository: LogRepository = mock[LogRepository]
@@ -110,7 +111,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
     }
 
     it("should return 500 if could not connect to redis") {
-      implicit val cachePool: JedisPool = mock[JedisPool]
+      implicit val cachePool: Pool[Jedis] = mock[Pool[Jedis]]
       implicit val dockerClient: DockerClient = mock[DockerClient]
       implicit val logRepository: LogRepository = mock[LogRepository]
 
@@ -135,7 +136,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
 
     it("should return 500 if LogRepository throws an exception") {
       implicit val cache: Jedis = mock[Jedis]
-      implicit val cachePool: JedisPool = mock[JedisPool]
+      implicit val cachePool: Pool[Jedis] = mock[Pool[Jedis]]
       implicit val dockerClient: DockerClient = mock[DockerClient]
       implicit val logRepository: LogRepository = mock[LogRepository]
 
@@ -167,7 +168,7 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
 
     it("should return 500 if DockerClient throws an exception") {
       implicit val cache: Jedis = mock[Jedis]
-      implicit val cachePool: JedisPool = mock[JedisPool]
+      implicit val cachePool: Pool[Jedis] = mock[Pool[Jedis]]
       implicit val dockerClient: DockerClient = mock[DockerClient]
       implicit val logRepository: LogRepository = mock[LogRepository]
 

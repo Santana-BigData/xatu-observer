@@ -10,14 +10,15 @@ import com.twitter.finagle.http.Request
 import com.twitter.finatra.http.Controller
 import com.typesafe.scalalogging.Logger
 import io.jvm.uuid.UUID
-import redis.clients.jedis.JedisPool
+import redis.clients.jedis.Jedis
+import redis.clients.jedis.util.Pool
 import slick.jdbc.MySQLProfile.api._
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
 class HealthcheckController(
-    implicit val cachePool: JedisPool,
+    implicit val cachePool: Pool[Jedis],
     implicit val client: Database,
     implicit val dockerClient: DockerClient,
     implicit val logRepository: LogRepository,

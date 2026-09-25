@@ -29,6 +29,10 @@ MYSQL_USER="root"
 MYSQL_PASSWORD="root"
 REDIS_HOST="localhost"
 REDIS_PORT="6379"
+# or, to use Redis Sentinel:
+# REDIS_MODE="sentinel"
+# REDIS_SENTINEL_MASTER="mymaster"
+# REDIS_SENTINEL_NODES="sentinel1:26379,sentinel2:26379,sentinel3:26379"
 ELASTIC_SEARCH_HOST="localhost"
 ELASTIC_SEARCH_PORT="9200"
 ELASTIC_SEARCH_LOG_INDEX="xatu-logs"
@@ -149,6 +153,11 @@ LOG_LEVEL=trace make test-integration-docker
 - MYSQL_PASSWORD: Password for MySQL.
 - REDIS_HOST: Host for Redis. 
 - REDIS_PORT; Port for Redis.
+- REDIS_PASSWORD: Password for Redis (also used for the master when using Sentinel).
+- REDIS_MODE: `standalone` (default) or `sentinel`. When `sentinel`, REDIS_HOST and REDIS_PORT are ignored.
+- REDIS_SENTINEL_MASTER: Name of the master monitored by Sentinel (default `mymaster`).
+- REDIS_SENTINEL_NODES: Comma separated list of Sentinel `host:port` (e.g. `sentinel1:26379,sentinel2:26379,sentinel3:26379`).
+- REDIS_SENTINEL_PASSWORD: Password for the Sentinel nodes, do not set if Sentinel has no authentication.
 - ELASTIC_SEARCH_HOST: Host for elasticsearch.
 - ELASTIC_SEARCH_PORT: Port for elasticsearch.
 - ELASTIC_SEARCH_LOG_INDEX: elasticsearch index name. Need not be already created.

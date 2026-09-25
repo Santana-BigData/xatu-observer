@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.twitter.finagle.context.Contexts
 import com.twitter.finatra.http.Controller
-import redis.clients.jedis.JedisPool
+import redis.clients.jedis.Jedis
+import redis.clients.jedis.util.Pool
 import com.danielsanrocha.xatu.commons.Security
 import com.danielsanrocha.xatu.models.internals.{RequestId, TTL, TimedCredential}
 import com.danielsanrocha.xatu.models.responses.{ServerMessage, Token}
@@ -13,7 +14,7 @@ import com.danielsanrocha.xatu.models.requests.Credential
 import com.danielsanrocha.xatu.services.UserService
 import com.twitter.finagle.http.Request
 
-class LoginController(implicit val service: UserService, implicit val cachePool: JedisPool, implicit val ec: scala.concurrent.ExecutionContext, implicit val ttl: TTL) extends Controller {
+class LoginController(implicit val service: UserService, implicit val cachePool: Pool[Jedis], implicit val ec: scala.concurrent.ExecutionContext, implicit val ttl: TTL) extends Controller {
   private val logging: Logger = Logger(this.getClass)
   private val jsonMapper = JsonMapper.builder().addModule(DefaultScalaModule).build()
 

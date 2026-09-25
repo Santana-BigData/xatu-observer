@@ -8,13 +8,14 @@ import com.twitter.finagle.context.Contexts
 import com.twitter.finagle.{Service, SimpleFilter}
 import com.twitter.util.Future
 import javax.inject.Singleton
-import redis.clients.jedis.JedisPool
+import redis.clients.jedis.Jedis
+import redis.clients.jedis.util.Pool
 
 import com.danielsanrocha.xatu.models.internals.{RequestId, TimedCredential}
 import com.danielsanrocha.xatu.models.responses.ServerMessage
 
 @Singleton
-class AuthorizeFilter(authorizationHeader: String, implicit val cachePool: JedisPool) extends SimpleFilter[Request, Response] {
+class AuthorizeFilter(authorizationHeader: String, implicit val cachePool: Pool[Jedis]) extends SimpleFilter[Request, Response] {
   private val logging = Logger(this.getClass)
   private val jsonMapper = JsonMapper.builder().addModule(DefaultScalaModule).build();
 
