@@ -22,6 +22,10 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
   private val esHost = conf.getString(s"$config.host")
   private val esPort = conf.getString(s"$config.port")
   private val esIndex = conf.getString(s"$config.index")
+  private val server = optionalString("server")
+
+  private def optionalString(path: String): Option[String] =
+    if (conf.hasPath(path)) Some(conf.getString(path)).filter(_.nonEmpty) else None
 
   private val indexMapping = Source.fromResource("logIndex.json").mkString
 
@@ -57,7 +61,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
         .option(HttpOptions.connTimeout(10000))
         .option(HttpOptions.readTimeout(10000))
         .header("content-type", "application/json")
-        .put(jsonMapper.writeValueAsString(log))
+        .put(jsonMapper.writeValueAsString(log.copy(server = server)))
         .execute()
 
       if (result.code != 201) {
@@ -75,7 +79,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
         .option(HttpOptions.connTimeout(10000))
         .option(HttpOptions.readTimeout(10000))
         .header("content-type", "application/json")
-        .put(jsonMapper.writeValueAsString(log))
+        .put(jsonMapper.writeValueAsString(log.copy(server = server)))
         .execute()
 
       if (result.code != 201) {
@@ -115,6 +119,7 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
 
       body("hits")("hits").arr map { hit =>
         val source = hit("_source")
+        val logServer = source.obj.get("server").map(_.str)
         try {
           val service_id = source("service_id").toString
           LogService(
@@ -122,11 +127,12 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
             source("service_name").str,
             source("filename").str,
             source("message").str,
-            source("created_at").toString().toLong
+            source("created_at").toString().toLong,
+            logServer
           )
         } catch {
           case _: NoSuchElementException =>
-            LogContainer(source("container_id").toString.toLong, source("container_name").str, source("message").str, source("created_at").toString().toLong)
+            LogContainer(source("container_id").toString.toLong, source("container_name").str, source("message").str, source("created_at").toString().toLong, logServer)
           case e: Exception => throw e
         }
       } toSeq

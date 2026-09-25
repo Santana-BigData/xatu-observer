@@ -164,7 +164,7 @@ LOG_LEVEL=trace make test-integration-docker
 - ELASTICSEARCH_ACTIVE: Set to "false" to deactivate ElasticSearch.
 - TELEGRAM_BOT_TOKEN: Token for telegram bot, do not set to deactivate telegram notifications.
 - TELEGRAM_CHAT_ID: Chat id for telegram bot.
-- SERVER: Name of this server. When set, telegram notifications are prefixed with it (e.g. `[production] API xpto is broken!`).
+- SERVER: Name of this server. When set, telegram notifications are prefixed with it (e.g. `[production] API xpto is broken!`) and it is saved in the `server` field of each log in elasticsearch.
 
 ## Tips
 
