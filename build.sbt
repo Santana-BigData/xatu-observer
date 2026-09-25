@@ -37,7 +37,10 @@ lazy val versions = new {
   val guava = "2.26-b03"
   val logback = "1.5.6"
   val scalaLogging = "3.9.5"
-  val netty = "4.0.27.Final"
+  // Aligned with the netty required by the cassandra driver; finagle brings older
+  // modules (codec-http, epoll) and mixing netty versions breaks at runtime.
+  val netty = "4.1.94.Final"
+  val cassandra = "4.17.0"
 }
 
 lazy val versionsTest = new {
@@ -59,6 +62,9 @@ libraryDependencies ++= Seq(
   "com.sun.activation" % "javax.activation" % versions.activation,
   "io.jvm.uuid" %% "scala-uuid" % versions.scalaUUID,
   "redis.clients" % "jedis" % versions.jedis,
+  // Server metrics time series (see src/main/resources/cassandra)
+  // jackson excluded: finatra needs 2.11 and the driver only uses it for DSE Insights
+  ("com.datastax.oss" % "java-driver-core" % versions.cassandra).excludeAll(ExclusionRule("com.fasterxml.jackson.core")),
   "org.scalaj" %% "scalaj-http" % versions.scalaj,
   "com.lihaoyi" %% "upickle" % versions.uJson,
   "com.github.docker-java" % "docker-java" % versions.docker,
@@ -68,9 +74,36 @@ libraryDependencies ++= Seq(
   "org.glassfish.hk2" % "hk2-api" % versions.hk2,
   "org.glassfish.jersey.bundles.repackaged" % "jersey-guava" % versions.guava,
   "com.typesafe.scala-logging" %% "scala-logging" % versions.scalaLogging,
-  "ch.qos.logback" % "logback-classic" % versions.logback,
-  "io.netty" % "netty-transport-native-epoll" % versions.netty
+  "ch.qos.logback" % "logback-classic" % versions.logback
+).map(_.excludeAll(epollFromFinagle))
+
+// Finagle asks for epoll with the old "linux-aarch64" classifier, which does not
+// exist in the aligned netty version, so its epoll is excluded and declared below.
+lazy val epollFromFinagle = ExclusionRule("io.netty", "netty-transport-native-epoll")
+
+// Declared explicitly (not only as overrides) so every netty module ends up in the
+// same version on the classpath.
+lazy val nettyModules = Seq(
+  "netty-buffer",
+  "netty-codec",
+  "netty-codec-http",
+  "netty-codec-http2",
+  "netty-codec-socks",
+  "netty-common",
+  "netty-handler",
+  "netty-handler-proxy",
+  "netty-resolver",
+  "netty-transport",
+  "netty-transport-native-unix-common"
 )
+
+libraryDependencies ++= nettyModules.map("io.netty" % _ % versions.netty) ++ Seq(
+  "io.netty" % "netty-transport-native-epoll" % versions.netty,
+  "io.netty" % "netty-transport-native-epoll" % versions.netty classifier "linux-x86_64",
+  "io.netty" % "netty-transport-native-epoll" % versions.netty classifier "linux-aarch_64"
+)
+
+dependencyOverrides ++= nettyModules.map("io.netty" % _ % versions.netty)
 
 Test / parallelExecution := false
 
@@ -84,4 +117,4 @@ libraryDependencies ++= Seq(
   "com.twitter" %% "inject-core" % versionsTest.twitter % Test classifier "tests",
   "com.twitter" %% "inject-modules" % versionsTest.twitter % Test classifier "tests",
   "com.h2database" % "h2" % versionsTest.h2 % Test
-)
+).map(_.excludeAll(epollFromFinagle))
