@@ -96,6 +96,17 @@ java -jar xatu.jar createUser
 
 you will be prompted asking for the name, email and password.
 
+## Running on more than one server
+
+Xatu can run on several servers sharing the same mysql (e.g. galera), redis and elasticsearch. Each instance must have a different `SERVER`.
+
+- Each Xatu checks only what is on its own server: services with `systemctl` (a stopped service whose unit is disabled, masked or missing on the server is not reported), containers that exist in its docker, and the APIs (every server checks every API).
+- The result of each server is saved in redis, never in mysql, so the servers do not overwrite each other. The pages show the status of each server and an aggregated one: a service or container fails if it fails on any server; an API fails only when most servers fail it (a single failing server is a network problem of that server).
+- Only one Xatu, the leader, sends telegram notifications. The leadership is a lock in redis; if the leader stops, another Xatu takes it in up to 30 seconds. Alerts say which server has the problem, are repeated every `TELEGRAM_REPEAT_MINUTES` while it lasts and a "Resolved" message is sent when it is gone.
+- A Xatu that stops sending heartbeats is alerted as "stopped reporting". When a server is decommissioned, remove it with `DELETE /api/servers/<SERVER>` (only after stopping its Xatu).
+
+Redis keys (always `::` separated): `xatu::status::<kind>::<id>::<server>`, `xatu::server::<server>`, `xatu::servers::known`, `xatu::leader`, `xatu::alert::<key>` and `xatu::token::<token>` (login).
+
 ## To package in an unique jar with all dependencies
 ```bash
 make assembly
@@ -175,6 +186,9 @@ LOG_LEVEL=trace make test-integration-docker
 - ELASTICSEARCH_PASSWORD: Password for elasticsearch user.
 - TELEGRAM_BOT_TOKEN: Token for telegram bot, do not set to deactivate telegram notifications.
 - TELEGRAM_CHAT_ID: Chat id for telegram bot.
+- CLUSTER_PERIOD_SECONDS: Seconds between heartbeats and leader election rounds (default 10).
+- CLUSTER_STATUS_TTL_SECONDS: Seconds a check or heartbeat is valid; after that the server is considered stopped (default 60).
+- TELEGRAM_REPEAT_MINUTES: Minutes before repeating an alert that is still happening (default 30).
 - CASSANDRA_ACTIVE: Set to "true" to save server metrics in cassandra (default "false").
 - CASSANDRA_CONTACT_POINTS: Comma separated list of cassandra hosts (default `127.0.0.1`).
 - CASSANDRA_PORT: Port for cassandra (default 9042).
@@ -186,7 +200,7 @@ LOG_LEVEL=trace make test-integration-docker
 - METRICS_INTERVAL_SECONDS: Seconds between two metrics samples (default 60).
 - METRICS_NET_INTERFACES: Comma separated network interfaces summed in the network chart. Empty (default) = all physical interfaces, which leaves out loopback, docker bridges, veth and vpn tunnels.
 - METRICS_DISK_PATH: Path whose filesystem is used for disk usage (default `/`).
-- SERVER: Name of this server. When set, telegram notifications are prefixed with it (e.g. `[production] API xpto is broken!`), it is saved in the `server` field of each log in elasticsearch and it names the server metrics (hostname when not set).
+- SERVER: Name of this server (hostname when not set). It names the checks of this server, is saved in the `server` field of each log in elasticsearch and names the server metrics. Must be different on each server.
 
 ## Tips
 
