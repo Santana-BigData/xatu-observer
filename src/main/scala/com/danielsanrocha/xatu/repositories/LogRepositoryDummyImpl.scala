@@ -18,7 +18,7 @@ class LogRepositoryDummyImpl extends LogRepository {
     Future.successful()
   }
 
-  override def search(query: String): Future[Seq[Log]] = {
+  override def search(query: String, size: Option[Int]): Future[Seq[Log]] = {
     Future.successful(Seq())
   }
 

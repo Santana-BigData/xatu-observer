@@ -162,6 +162,7 @@ LOG_LEVEL=trace make test-integration-docker
 - ELASTIC_SEARCH_PORT: Port for elasticsearch.
 - ELASTIC_SEARCH_LOG_INDEX: elasticsearch index name. Need not be already created.
 - ELASTICSEARCH_ACTIVE: Set to "false" to deactivate ElasticSearch.
+- ELASTICSEARCH_SEARCH_SIZE: Default max number of logs returned by a search (default 500, max 10000). Can be overridden per search with the `size` query param.
 - ELASTICSEARCH_USER: User for elasticsearch (basic auth), do not set if elasticsearch has no authentication.
 - ELASTICSEARCH_PASSWORD: Password for elasticsearch user.
 - TELEGRAM_BOT_TOKEN: Token for telegram bot, do not set to deactivate telegram notifications.

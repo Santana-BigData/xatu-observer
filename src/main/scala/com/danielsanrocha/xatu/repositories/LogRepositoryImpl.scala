@@ -22,6 +22,9 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
   private val esHost = conf.getString(s"$config.host")
   private val esPort = conf.getString(s"$config.port")
   private val esIndex = conf.getString(s"$config.index")
+  private val defaultSearchSize = conf.getInt(s"$config.search_size")
+  // Elasticsearch default index.max_result_window
+  private val maxSearchSize = 10000
   private val server = optionalString("server")
   private val credentials = for {
     user <- optionalString(s"$config.user")
@@ -96,16 +99,21 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
     }
   }
 
-  override def search(query: String): Future[Seq[Log]] = {
+  override def search(query: String, size: Option[Int]): Future[Seq[Log]] = {
     Future {
       if (query.contains("\"")) {
         throw new BadArgumentException("Invalid query contains \"")
       }
 
-      val route = s"$esHost:$esPort/$esIndex/_search"
-      logging.debug(s"Making a search for logs with query `$query`")
+      val searchSize = size.getOrElse(defaultSearchSize)
+      if (searchSize < 1 || searchSize > maxSearchSize) {
+        throw new BadArgumentException(s"Invalid size $searchSize, must be between 1 and $maxSearchSize")
+      }
 
-      val data = s"{\"sort\":[{\"created_at\":{\"order\": \"asc\"}}], \"query\": {\"query_string\" : {\"query\": \"$query\"}}}"
+      val route = s"$esHost:$esPort/$esIndex/_search"
+      logging.debug(s"Making a search for logs with query `$query` and size $searchSize")
+
+      val data = s"{\"size\": $searchSize, \"sort\":[{\"created_at\":{\"order\": \"desc\"}}], \"query\": {\"query_string\" : {\"query\": \"$query\"}}}"
 
       logging.debug(s"Search post data: $data")
 

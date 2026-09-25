@@ -21,7 +21,7 @@ class LogServiceImpl(implicit val repository: LogRepository) extends LogService 
     repository.create(name, log)
   }
 
-  override def search(query: String): Future[Seq[Log]] = {
-    repository.search(query)
+  override def search(query: String, size: Option[Int]): Future[Seq[Log]] = {
+    repository.search(query, size)
   }
 }

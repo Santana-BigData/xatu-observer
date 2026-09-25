@@ -14,7 +14,7 @@ class LogController(implicit val service: LogService, implicit val ec: scala.con
   get("/api/logs") { request: LogSearchRequest =>
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) Search logs called, returning result...")
-    service.search(request.query) map { result =>
+    service.search(request.query, request.size) map { result =>
       HitsResult(result.length, result)
     }
   }
