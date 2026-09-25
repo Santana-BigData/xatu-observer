@@ -4,5 +4,6 @@ case class ServerStatus(
     redis: String,
     mysql: String,
     docker: String,
-    elasticsearch: String
+    elasticsearch: String,
+    cassandra: String
 )

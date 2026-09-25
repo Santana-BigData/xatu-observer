@@ -1,6 +1,7 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.controllers.StatusController
+import com.danielsanrocha.xatu.commons.SystemMetricsReader
+import com.danielsanrocha.xatu.controllers.{MetricsController, StatusController}
 import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
   APIRepository,
@@ -9,6 +10,10 @@ import com.danielsanrocha.xatu.repositories.{
   ContainerRepositoryImpl,
   LogRepository,
   LogRepositoryImpl,
+  MetricsRepository,
+  MetricsRepositoryDummyImpl,
+  MetricsRepositoryImpl,
+  CassandraSession,
   ServiceRepository,
   ServiceRepositoryImpl,
   UserRepository,
@@ -36,6 +41,11 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
     if (conf.getString("elasticsearch.active") == "true") new LogRepositoryImpl("elasticsearch", ec)
     else new com.danielsanrocha.xatu.repositories.LogRepositoryDummyImpl()
 
+  logging.info("Creating metrics repository...")
+  implicit val metricsRepository: MetricsRepository =
+    if (conf.getString("cassandra.active") == "true") new MetricsRepositoryImpl(CassandraSession.fromConfig(conf))
+    else new MetricsRepositoryDummyImpl()
+
   logging.info("Instantiating docker client...")
   implicit val dockerClient: DockerClient = DockerClientBuilder.getInstance.build
 
@@ -56,18 +66,30 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   private val managersEnable = conf.getBoolean("managers.enabled")
 
   private val token = conf.getString("telegram.bot_token")
+  private val server = if (conf.hasPath("server")) Some(conf.getString("server")).filter(_.nonEmpty) else None
+  val metricsInterval: Int = conf.getInt("metrics.interval_seconds")
 
   def start(): Unit = {
     if (token != "inactive") {
       logging.info("Starting TelegramNotifier...")
 
       val chatId = conf.getString("telegram.chat_id")
-      val server = if (conf.hasPath("server")) Some(conf.getString("server")).filter(_.nonEmpty) else None
       val telegramNotifier = new TelegramNotifier(token = token, chatId = chatId, containerService, apiService, serviceService, ec, server)
 
       telegramNotifier.start()
     } else {
       logging.info("Telegram token is to inactive.")
+    }
+
+    if (metricsRepository.active) {
+      val reader = new SystemMetricsReader(
+        server = server.getOrElse(java.net.InetAddress.getLocalHost.getHostName),
+        netInterfaces = conf.getString("metrics.net_interfaces").split(",").map(_.trim).filter(_.nonEmpty).toSeq,
+        diskPath = conf.getString("metrics.disk_path")
+      )
+      new MetricsCollector(reader, metricsRepository, metricsInterval).start()
+    } else {
+      logging.info("Cassandra is inactive, server metrics are not collected.")
     }
 
     if (managersEnable) {
@@ -80,4 +102,5 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   }
 
   val statusController = new StatusController()
+  val metricsController = new MetricsController(metricsInterval)
 }

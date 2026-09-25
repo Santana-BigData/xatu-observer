@@ -2,7 +2,7 @@ package com.danielsanrocha.xatu.controllers
 
 import com.danielsanrocha.xatu.models.internals.RequestId
 import com.danielsanrocha.xatu.models.responses.ServerStatus
-import com.danielsanrocha.xatu.repositories.LogRepository
+import com.danielsanrocha.xatu.repositories.{LogRepository, MetricsRepository}
 import com.danielsanrocha.xatu.commons.FutureTimeout._
 import com.github.dockerjava.api.DockerClient
 import com.twitter.finagle.context.Contexts
@@ -22,6 +22,7 @@ class HealthcheckController(
     implicit val client: Database,
     implicit val dockerClient: DockerClient,
     implicit val logRepository: LogRepository,
+    implicit val metricsRepository: MetricsRepository,
     implicit val ec: scala.concurrent.ExecutionContext,
     implicit val timeout: FiniteDuration
 ) extends Controller {
@@ -29,7 +30,7 @@ class HealthcheckController(
 
   get("/api/healthcheck") { _: Request =>
     val requestId = Contexts.local.get(RequestId).head.requestId
-    logging.info(s"(x-request-id - $requestId) Healthcheck called, checking redis, docker, elasticsearch and mysql...")
+    logging.info(s"(x-request-id - $requestId) Healthcheck called, checking redis, docker, elasticsearch, cassandra and mysql...")
 
     val redisFuture = Future[Option[Throwable]] {
       val random = UUID.random.toString
@@ -74,7 +75,14 @@ class HealthcheckController(
       Some(e)
     }
 
-    Future.sequence(Seq(redisFuture, mysqlFuture, dockerFuture, elasticsearchFuture)) map { result =>
+    val cassandraFuture = metricsRepository.status() map { _ =>
+      None
+    } withTimeout (ec, timeout) recover { case e: Throwable =>
+      logging.error(s"Error accessing Cassandra! Message: ${e.getMessage}")
+      Some(e)
+    }
+
+    Future.sequence(Seq(redisFuture, mysqlFuture, dockerFuture, elasticsearchFuture, cassandraFuture)) map { result =>
       var flag = false
 
       val redis = result.head match {
@@ -94,7 +102,13 @@ class HealthcheckController(
         case None    => "Ok"
       }
 
-      val status = ServerStatus(redis, mysql, docker, elasticsearch)
+      val cassandra = result(4) match {
+        case Some(e)                            => flag = true; e.getMessage
+        case None if !metricsRepository.active => "Inactive"
+        case None                               => "Ok"
+      }
+
+      val status = ServerStatus(redis, mysql, docker, elasticsearch, cassandra)
       if (flag) response.internalServerError(status)
       else response.ok(status)
     }

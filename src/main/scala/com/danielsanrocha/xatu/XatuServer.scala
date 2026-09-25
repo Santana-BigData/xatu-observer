@@ -59,6 +59,8 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
   logging.info("Getting api configuration...")
   private val authorizationHeader = conf.getString("api.auth.header")
 
+  private implicit val metricsRepository: MetricsRepository = greatManager.metricsRepository
+
   logging.info("Instantiating controllers...")
   private val indexController = new IndexController()
   implicit val healthcheckTimeout: FiniteDuration = new FiniteDuration(conf.getInt("api.healthcheck_timeout"), TimeUnit.MILLISECONDS)
@@ -96,6 +98,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
       .add(authorizeFilter, logController)
       .add(authorizeFilter, containerController)
       .add(authorizeFilter, greatManager.statusController)
+      .add(authorizeFilter, greatManager.metricsController)
       .add(healthcheckController)
       .add(webController)
       .add(notFoundController)
