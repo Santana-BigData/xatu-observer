@@ -50,3 +50,5 @@ xatu.jar
 start
 
 src/main/resources/dist
+
+deploy.sh
