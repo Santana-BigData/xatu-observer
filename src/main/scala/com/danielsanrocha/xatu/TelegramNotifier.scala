@@ -13,7 +13,8 @@ class TelegramNotifier(
     implicit val containerService: ContainerService,
     implicit val apiService: APIService,
     implicit val serviceService: ServiceService,
-    implicit val ec: ExecutionContext
+    implicit val ec: ExecutionContext,
+    server: Option[String] = None
 ) {
   private val logging: Logger = Logger(this.getClass)
 
@@ -51,12 +52,13 @@ class TelegramNotifier(
   }
 
   private def notify(message: String): Unit = {
-    logging.debug(s"TelegramNotifier message: $message")
+    val text = server.fold(message)(s => s"[$s] $message")
+    logging.debug(s"TelegramNotifier message: $text")
     val route = s"https://api.telegram.org/bot$token/sendMessage";
 
     val result = Http(route)
       .param("chat_id", chatId)
-      .param("text", message)
+      .param("text", text)
       .option(HttpOptions.connTimeout(10000))
       .option(HttpOptions.readTimeout(10000))
       .execute()

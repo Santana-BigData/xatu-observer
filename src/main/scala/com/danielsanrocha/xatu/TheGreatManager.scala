@@ -62,7 +62,8 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
       logging.info("Starting TelegramNotifier...")
 
       val chatId = conf.getString("telegram.chat_id")
-      val telegramNotifier = new TelegramNotifier(token = token, chatId = chatId, containerService, apiService, serviceService, ec)
+      val server = if (conf.hasPath("server")) Some(conf.getString("server")).filter(_.nonEmpty) else None
+      val telegramNotifier = new TelegramNotifier(token = token, chatId = chatId, containerService, apiService, serviceService, ec, server)
 
       telegramNotifier.start()
     } else {
