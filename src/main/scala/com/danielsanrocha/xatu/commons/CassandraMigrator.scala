@@ -20,6 +20,7 @@ object CassandraMigrator {
 
   private val resourceDir = "cassandra"
   private val FileName = """V(\d+)__(\w+)\.cql""".r
+  private val SchemaTimeout = java.time.Duration.ofSeconds(60)
 
   case class Migration(version: Int, name: String, file: String)
 
@@ -88,7 +89,8 @@ object CassandraMigrator {
       logging.info(s"Applying ${m.file}...")
       statements(render(read(m.file), vars)).foreach { st =>
         logging.debug(s"Executing: $st")
-        session.execute(SimpleStatement.newInstance(st))
+        // schema changes wait for every node to agree, much longer than a normal query
+        session.execute(SimpleStatement.newInstance(st).setTimeout(SchemaTimeout))
       }
       session.execute(
         SimpleStatement.newInstance(
