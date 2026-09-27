@@ -1,7 +1,7 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.{RedisPool, SystemMetricsReader}
-import com.danielsanrocha.xatu.controllers.{MetricsController, StatusController}
+import com.danielsanrocha.xatu.commons.{ContainerStatsReader, RedisPool, SystemMetricsReader}
+import com.danielsanrocha.xatu.controllers.{ContainerMetricsController, MetricsController, StatusController}
 import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
   APIRepository,
@@ -10,6 +10,9 @@ import com.danielsanrocha.xatu.repositories.{
   ContainerRepositoryImpl,
   LogRepository,
   LogRepositoryImpl,
+  ContainerMetricsRepository,
+  ContainerMetricsRepositoryDummyImpl,
+  ContainerMetricsRepositoryImpl,
   MetricsRepository,
   MetricsRepositoryDummyImpl,
   MetricsRepositoryImpl,
@@ -58,9 +61,12 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   val leaderElection = new LeaderElection(server, statusRepository, clusterPeriod)
 
   logging.info("Creating metrics repository...")
+  private val cassandraActive = conf.getString("cassandra.active") == "true"
+  private lazy val cassandraSession = CassandraSession.fromConfig(conf)
   implicit val metricsRepository: MetricsRepository =
-    if (conf.getString("cassandra.active") == "true") new MetricsRepositoryImpl(CassandraSession.fromConfig(conf))
-    else new MetricsRepositoryDummyImpl()
+    if (cassandraActive) new MetricsRepositoryImpl(cassandraSession) else new MetricsRepositoryDummyImpl()
+  implicit val containerMetricsRepository: ContainerMetricsRepository =
+    if (cassandraActive) new ContainerMetricsRepositoryImpl(cassandraSession) else new ContainerMetricsRepositoryDummyImpl()
 
   logging.info("Instantiating docker client...")
   implicit val dockerClient: DockerClient = DockerClientBuilder.getInstance.build
@@ -112,6 +118,13 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
         diskPath = conf.getString("metrics.disk_path")
       )
       new MetricsCollector(reader, metricsRepository, metricsInterval).start()
+
+      ContainerStatsReader.dockerUrl(sys.env.get("DOCKER_HOST")) match {
+        case Some(url) =>
+          new ContainerMetricsCollector(new ContainerStatsReader(server, url), containerMetricsRepository, metricsInterval).start()
+        case None =>
+          logging.warn("DOCKER_HOST is not a tcp address (e.g. tcp://127.0.0.1:2375), docker container metrics are not collected.")
+      }
     } else {
       logging.info("Cassandra is inactive, server metrics are not collected.")
     }
@@ -128,4 +141,5 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
 
   val statusController = new StatusController(server)
   val metricsController = new MetricsController(metricsInterval)
+  val containerMetricsController = new ContainerMetricsController()
 }
