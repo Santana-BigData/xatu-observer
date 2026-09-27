@@ -58,8 +58,11 @@ The schema is versioned in `src/main/resources/cassandra/V<number>__<name>.cql`.
 
 With cassandra active, each Xatu also samples every running docker container of its server each minute: cpu (100% = one core, like `docker stats`), cpu limit, memory usage (without reclaimable page cache) and limit, network and disk read/write rates, pids, restart count, OOM kill, health, image, id and start time. The identity of a container is its **name**, which is kept when it moves to another server (the docker id changes); the server and id are saved in every sample. It needs `DOCKER_HOST` as a tcp address (e.g. `tcp://127.0.0.1:2375`).
 
+The "Docker usage" page lists every container with its current cpu, memory (against its limit), network, disk, pids, restarts and health, with search (name, image or id), filters by server and by problem (unhealthy, OOM killed, restarted, memory ≥ 90%, cpu ≥ 80%, no recent data) and the history charts of a container on click. Search, filters and the open container are kept in the url, so the link can be shared.
+
 - `GET /api/metrics/containers`: where each container is running now (server, id, image, last seen).
-- `GET /api/metrics/containers/samples?name=<container>&from=<ms>&to=<ms>`: samples of a container on any server.
+- `GET /api/metrics/containers/overview`: every container of the inventory with its latest sample.
+- `GET /api/metrics/containers/samples?name=<container>&from=<ms>&to=<ms>&step=<seconds>`: samples of a container on any server (`step` averages them, one line per server).
 - `GET /api/metrics/containers/samples?server=<SERVER>&from=<ms>&to=<ms>`: samples of every container of a server.
 
 You can start the server with
