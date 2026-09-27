@@ -34,6 +34,9 @@
               <v-icon>mdi-chart-line</v-icon>&nbsp;<a href="/metrics">Metrics</a>
             </v-list-item>
             <v-list-item>
+              <v-icon>mdi-chart-box-outline</v-icon>&nbsp;<a href="/docker">Docker usage</a>
+            </v-list-item>
+            <v-list-item>
               <v-icon>mdi-logout</v-icon>&nbsp;<button @click="logout">Logout</button>
             </v-list-item>
           </v-list>
