@@ -6,5 +6,6 @@ case class ContainerSamplesRequest(
     @QueryParam name: Option[String] = None,
     @QueryParam server: Option[String] = None,
     @QueryParam from: Option[Long] = None,
-    @QueryParam to: Option[Long] = None
+    @QueryParam to: Option[Long] = None,
+    @QueryParam step: Option[Long] = None
 )

@@ -141,5 +141,5 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
 
   val statusController = new StatusController(server)
   val metricsController = new MetricsController(metricsInterval)
-  val containerMetricsController = new ContainerMetricsController()
+  val containerMetricsController = new ContainerMetricsController(metricsInterval)
 }

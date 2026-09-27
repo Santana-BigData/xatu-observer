@@ -1,7 +1,8 @@
 package com.danielsanrocha.xatu.controllers
 
+import com.danielsanrocha.xatu.commons.ContainerMetricsAggregator
 import com.danielsanrocha.xatu.exceptions.BadArgumentException
-import com.danielsanrocha.xatu.models.internals.RequestId
+import com.danielsanrocha.xatu.models.internals.{ContainerOverview, RequestId}
 import com.danielsanrocha.xatu.models.requests.ContainerSamplesRequest
 import com.danielsanrocha.xatu.models.responses.HitsResult
 import com.danielsanrocha.xatu.repositories.ContainerMetricsRepository
@@ -12,7 +13,7 @@ import com.typesafe.scalalogging.Logger
 
 import scala.concurrent.Future
 
-class ContainerMetricsController(implicit val repository: ContainerMetricsRepository, implicit val ec: scala.concurrent.ExecutionContext) extends Controller {
+class ContainerMetricsController(intervalSeconds: Long)(implicit val repository: ContainerMetricsRepository, implicit val ec: scala.concurrent.ExecutionContext) extends Controller {
   private val logging: Logger = Logger(this.getClass)
 
   private val maxRangeMillis = 8L * 24 * 3600 * 1000
@@ -25,7 +26,28 @@ class ContainerMetricsController(implicit val repository: ContainerMetricsReposi
     repository.inventory() map { containers => HitsResult(containers.length, containers) }
   }
 
-  /** Raw samples (one per minute) of a container by name, or of every container of a server. */
+  /**
+   * Every container of the inventory with its latest sample, for the containers page:
+   * one query per server over the last minutes instead of one per container.
+   */
+  get("/api/metrics/containers/overview") { _: Request =>
+    val requestId = Contexts.local.get(RequestId).head.requestId
+    logging.info(s"(x-request-id - $requestId) Container overview route called...")
+    val now = System.currentTimeMillis()
+    val window = math.max(5 * 60, 3 * intervalSeconds) * 1000
+
+    repository.inventory() flatMap { inventory =>
+      Future.sequence(inventory.map(_.server).distinct.map(server => repository.byServer(server, now - window, now))) map { samples =>
+        val latest = samples.flatten.groupBy(s => (s.containerName, s.server)).view.mapValues(_.maxBy(_.collectedAt)).toMap
+        val rows = inventory.map { c =>
+          ContainerOverview(c.containerName, c.server, c.containerId, c.image, c.startedAt, c.lastSeen, latest.get((c.containerName, c.server)))
+        }
+        HitsResult(rows.length, rows)
+      }
+    }
+  }
+
+  /** Samples (one per minute, or averaged by `step` seconds) (one per minute) of a container by name, or of every container of a server. */
   get("/api/metrics/containers/samples") { request: ContainerSamplesRequest =>
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) Container samples route called for name ${request.name} server ${request.server}...")
@@ -42,6 +64,10 @@ class ContainerMetricsController(implicit val repository: ContainerMetricsReposi
       case (None, Some(s))               => repository.byServer(s, from, to)
       case _                             => Future.failed(new BadArgumentException("give either name or server"))
     }
-    samples map { s => HitsResult(s.length, s) }
+    request.step match {
+      case Some(step) if step < 1 => Future.failed(new BadArgumentException("step must be positive"))
+      case Some(step)             => samples map { s => val points = ContainerMetricsAggregator.aggregate(s, step); HitsResult(points.length, points) }
+      case None                   => samples map { s => HitsResult(s.length, s) }
+    }
   }
 }
