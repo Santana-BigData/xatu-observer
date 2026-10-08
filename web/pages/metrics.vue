@@ -166,7 +166,9 @@ export default {
     throttled() {
       return this.gpuSeriesKeys.flatMap(({ server, gpu }) => {
         const reasons = new Set((this.gpuResults[server] || []).filter((p) => p.gpu_index === gpu).flatMap((p) => p.throttle_reasons || []))
+        // idle and fixed application clocks are normal, not a slowdown
         reasons.delete('gpu_idle')
+        reasons.delete('applications_clocks_setting')
         return reasons.size ? [`${this.gpuLabel(server, gpu)}: ${[...reasons].join(', ')}`] : []
       })
     },

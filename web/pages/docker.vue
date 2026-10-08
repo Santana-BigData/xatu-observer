@@ -3,6 +3,7 @@
     <v-col cols="12">
       <v-card elevation="2" id="docker-card">
         <!-- summary per server: click to filter -->
+        <div class="row-label"><v-icon small>mdi-server</v-icon> Servers</div>
         <div class="docker-servers">
           <v-card
             v-for="s in serverSummary"
@@ -28,6 +29,54 @@
             </div>
           </v-card>
         </div>
+
+        <!-- workers: machines with only the agent (gpu miners) -->
+        <template v-if="workerCards.length">
+          <div class="row-label"><v-icon small>mdi-expansion-card</v-icon> Workers</div>
+          <div class="docker-workers">
+            <v-card v-for="w in workerCards" :key="w.server" outlined class="worker-card">
+              <div class="server-card-title" :style="{ color: color(w.server) }">
+                <v-icon small :color="color(w.server)">mdi-expansion-card</v-icon> {{ w.server }}
+                <span v-if="w.stale" class="worker-stale" :title="'last sample ' + ago(w.lastSeen) + ' ago'">no data for {{ ago(w.lastSeen) }}</span>
+              </div>
+              <div class="server-card-values">
+                <div><span>cpu</span><strong>{{ percent(w.cpu) }}</strong><small>{{ w.cores }} cores</small></div>
+                <div><span>memory</span><strong>{{ bytes(w.mem) }}</strong><small>of {{ bytes(w.memTotal) }}</small></div>
+                <div><span>load</span><strong>{{ w.load }}</strong><small>1m</small></div>
+              </div>
+              <div v-for="g in w.gpus" :key="g.gpu_index" class="gpu-row">
+                <div class="gpu-head">
+                  <strong>GPU {{ g.gpu_index }}</strong>
+                  <span class="gpu-name">{{ g.name.replace(/^NVIDIA /, '') }}</span>
+                  <span :class="['gpu-pstate', g.pstate === 'P0' ? 'busy' : 'idle']" :title="g.pstate === 'P0' ? 'max performance state' : 'power saving state'">{{ g.pstate }}</span>
+                  <v-icon v-if="throttling(g).length" x-small color="orange" :title="'throttling: ' + throttling(g).join(', ')">mdi-alert</v-icon>
+                </div>
+                <div class="gpu-meters">
+                  <div class="gpu-meter" :title="'utilization ' + g.utilization_gpu_percent + '%'">
+                    <span>util</span>
+                    <div class="meter"><div :class="['meter-fill', level(g.utilization_gpu_percent / 100)]" :style="{ width: bar(g.utilization_gpu_percent / 100) }"></div></div>
+                    <small>{{ g.utilization_gpu_percent }}%</small>
+                  </div>
+                  <div class="gpu-meter" :title="bytes(g.mem_used_bytes) + ' of ' + bytes(g.mem_total_bytes)">
+                    <span>mem</span>
+                    <div class="meter"><div :class="['meter-fill', level(g.mem_used_bytes / g.mem_total_bytes)]" :style="{ width: bar(g.mem_used_bytes / g.mem_total_bytes) }"></div></div>
+                    <small>{{ bytes(g.mem_used_bytes) }} / {{ bytes(g.mem_total_bytes) }}</small>
+                  </div>
+                </div>
+                <div class="gpu-facts">
+                  <span :class="{ hot: g.temperature_c >= 80 }">{{ g.temperature_c }}°C</span>
+                  <span>{{ Math.round(g.power_draw_w) }} / {{ Math.round(g.power_limit_w) }} W</span>
+                  <span v-if="g.fan_percent !== undefined">fan {{ g.fan_percent }}%</span>
+                  <span v-if="g.processes && g.processes.length" class="gpu-procs" :title="g.processes.map((p) => p.name + ' (pid ' + p.pid + ', ' + bytes(p.mem_used_bytes) + ')').join('\n')">
+                    <v-icon x-small>mdi-application-cog</v-icon>{{ g.processes.map((p) => p.name.split('/').pop()).join(', ') }}
+                  </span>
+                  <span v-else class="gpu-free">no process</span>
+                </div>
+              </div>
+              <div v-if="!w.gpus.length" class="gpu-free">no gpu samples</div>
+            </v-card>
+          </div>
+        </template>
 
         <!-- search and filters -->
         <div class="docker-toolbar">
@@ -186,6 +235,8 @@ export default {
     return {
       overview: [],
       hostServers: [],
+      xatuServers: [],
+      workers: {},
       loading: false,
       updatedAt: null,
       now: Date.now(),
@@ -216,8 +267,30 @@ export default {
     }
   },
   computed: {
+    // servers run the full Xatu (heartbeat) or have containers; the rest are workers (agents)
     serverNames() {
-      return [...new Set([...this.hostServers.map((s) => s.server), ...this.overview.map((c) => c.server)])].sort()
+      return [...new Set([...this.xatuServers, ...this.overview.map((c) => c.server)])].sort()
+    },
+    workerNames() {
+      return this.hostServers.map((s) => s.server).filter((s) => !this.serverNames.includes(s)).sort()
+    },
+    workerCards() {
+      return this.workerNames.map((server) => {
+        const host = this.hostServers.find((h) => h.server === server) || {}
+        const w = this.workers[server] || {}
+        const p = w.point
+        return {
+          server,
+          lastSeen: host.last_seen,
+          stale: !host.last_seen || this.now - host.last_seen > 3 * 60 * 1000,
+          cores: host.cpu_cores,
+          cpu: p ? p.cpu_percent : null,
+          mem: p ? p.mem_used_bytes : null,
+          memTotal: p ? p.mem_total_bytes : host.mem_total_bytes,
+          load: p ? p.load_1m.toFixed(2) : '-',
+          gpus: w.gpus || [],
+        }
+      })
     },
     rows() {
       const hosts = Object.fromEntries(this.hostServers.map((s) => [s.server, s]))
@@ -342,7 +415,7 @@ export default {
     duration,
     dateTime,
     color(server) {
-      return paletteColor(Math.max(0, this.serverNames.indexOf(server)))
+      return paletteColor(Math.max(0, [...this.serverNames, ...this.workerNames].indexOf(server)))
     },
     serverStyle(server) {
       return { color: this.color(server), borderColor: this.color(server) }
@@ -363,6 +436,10 @@ export default {
           return r.stale
       }
       return false
+    },
+    // reasons that mean a real slowdown; idle and fixed application clocks are normal
+    throttling(g) {
+      return (g.throttle_reasons || []).filter((t) => !['gpu_idle', 'applications_clocks_setting'].includes(t))
     },
     level(ratio) {
       return ratio >= 0.9 ? 'high' : ratio >= 0.7 ? 'medium' : 'low'
@@ -415,14 +492,35 @@ export default {
       const message = e.response && e.response.data ? e.response.data.message : e.message
       if (this.logModal) this.logModal.open(e.name, message)
     },
+    // last host sample and last sample of each gpu of every worker
+    loadWorkers() {
+      const to = Date.now()
+      const from = to - 5 * 60 * 1000
+      return Promise.all(
+        this.workerNames.map((server) =>
+          Promise.all([
+            client.get('/metrics', { params: { server, from, to, step: 60 } }).catch(() => ({ data: { points: [] } })),
+            // the gpu api may not exist in an older backend
+            client.get('/metrics/gpus/samples', { params: { server, from, to, step: 60 } }).catch(() => ({ data: { hits: [] } })),
+          ]).then(([metrics, gpus]) => {
+            const points = metrics.data.points
+            const samples = gpus.data.hits
+            const lastAt = Math.max(0, ...samples.map((g) => g.collected_at))
+            return [server, { point: points[points.length - 1], gpus: samples.filter((g) => g.collected_at === lastAt).sort((a, b) => a.gpu_index - b.gpu_index) }]
+          })
+        )
+      ).then((entries) => (this.workers = Object.fromEntries(entries)))
+    },
     load() {
       this.loading = true
-      return Promise.all([client.get('/metrics/containers/overview'), client.get('/metrics/servers')])
-        .then(([overview, servers]) => {
+      return Promise.all([client.get('/metrics/containers/overview'), client.get('/metrics/servers'), client.get('/status').catch(() => ({ data: {} }))])
+        .then(([overview, servers, status]) => {
           this.overview = overview.data.hits
           this.hostServers = servers.data.hits
+          this.xatuServers = (status.data.servers || []).map((s) => s.server)
           this.updatedAt = Date.now()
           this.now = Date.now()
+          return this.loadWorkers()
         })
         .catch((e) => this.showError(e))
         .finally(() => {
@@ -489,6 +587,176 @@ export default {
     .bad {
       color: #d32f2f;
     }
+  }
+}
+
+.row-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #33563f;
+  margin: 2px 0 6px;
+}
+
+.docker-workers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+
+  .worker-card {
+    padding: 8px 12px 10px;
+  }
+
+  .worker-stale {
+    font-size: 11px;
+    font-weight: normal;
+    color: #b26a00;
+    margin-left: 6px;
+  }
+
+  .server-card-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .server-card-values {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 6px;
+
+    div {
+      display: flex;
+      flex-direction: column;
+    }
+
+    span {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    strong {
+      font-size: 15px;
+    }
+
+    small {
+      font-size: 10px;
+      color: #777;
+    }
+  }
+
+  .gpu-row {
+    border-top: 1px solid #edf1ee;
+    padding-top: 6px;
+    margin-top: 6px;
+  }
+
+  .gpu-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+
+    .gpu-name {
+      color: #555;
+    }
+
+    .gpu-pstate {
+      font-size: 10px;
+      padding: 0 5px;
+      border-radius: 6px;
+
+      &.busy {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+
+      &.idle {
+        background: #f1f1f1;
+        color: #888;
+      }
+    }
+  }
+
+  .gpu-meters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 4px 0 2px;
+  }
+
+  .gpu-meter {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    align-items: center;
+    column-gap: 6px;
+
+    span {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    small {
+      grid-column: 2;
+      font-size: 11px;
+      color: #555;
+    }
+  }
+
+  .meter {
+    height: 6px;
+    background: #e8ece9;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    height: 100%;
+    border-radius: 3px;
+
+    &.low {
+      background: #43a047;
+    }
+
+    &.medium {
+      background: #fb8c00;
+    }
+
+    &.high {
+      background: #e53935;
+    }
+  }
+
+  .gpu-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 11.5px;
+    color: #555;
+
+    .hot {
+      color: #d32f2f;
+      font-weight: 600;
+    }
+
+    .gpu-procs {
+      color: #1f3d2a;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .gpu-free {
+    font-size: 11.5px;
+    color: #999;
   }
 }
 
