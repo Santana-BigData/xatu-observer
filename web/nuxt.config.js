@@ -69,7 +69,11 @@ export default {
   // Build Configuration: https://go.nuxtjs.dev/config-build
   build: {
     // chart.js ships modern syntax that webpack 4 does not parse untranspiled
-    transpile: ['chart.js'],
+    transpile: ['chart.js', 'marked'],
+    // docs/API.md is imported as text by the API docs page
+    extend(config) {
+      config.module.rules.push({ test: /\.md$/, use: 'raw-loader' })
+    },
   },
   publicRuntimeConfig: {
     API_URL: process.env.PUBLIC_API_URL

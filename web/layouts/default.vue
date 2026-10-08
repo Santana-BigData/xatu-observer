@@ -37,6 +37,12 @@
               <v-icon>mdi-chart-box-outline</v-icon>&nbsp;<a href="/docker">Docker usage</a>
             </v-list-item>
             <v-list-item>
+              <v-icon>mdi-key-variant</v-icon>&nbsp;<a href="/tokens">Tokens</a>
+            </v-list-item>
+            <v-list-item>
+              <v-icon>mdi-book-open-variant</v-icon>&nbsp;<a href="/api-docs">API docs</a>
+            </v-list-item>
+            <v-list-item>
               <v-icon>mdi-logout</v-icon>&nbsp;<button @click="logout">Logout</button>
             </v-list-item>
           </v-list>

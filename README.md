@@ -105,6 +105,10 @@ java -jar xatu.jar createUser
 
 you will be prompted asking for the name, email and password.
 
+## API
+
+The HTTP API is documented in [docs/API.md](docs/API.md) (also in the "API docs" page of the interface). Integrations authenticate with permanent tokens created in the "Tokens" page and sent as `Authorization: Bearer xatu_...`; only the sha-256 of each token is stored (table `tb_api_tokens`, created by `createTables`).
+
 ## Running on more than one server
 
 Xatu can run on several servers sharing the same mysql (e.g. galera), redis and elasticsearch. Each instance must have a different `SERVER`.
