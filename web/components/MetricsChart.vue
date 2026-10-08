@@ -83,7 +83,10 @@ export default {
           tooltip: {
             callbacks: {
               title: (items) => (items.length ? that.formatTime(items[0].parsed.x, true) : ''),
-              label: (item) => `${item.dataset.label}: ${that.formatY(item.parsed.y)}`,
+              label: (item) => {
+                const extra = item.raw && item.raw.processes ? ` (${item.raw.processes})` : ''
+                return `${item.dataset.label}: ${that.formatY(item.parsed.y)}${extra}`
+              },
             },
           },
         },

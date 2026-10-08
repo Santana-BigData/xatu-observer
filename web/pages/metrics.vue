@@ -45,6 +45,7 @@
                 <div><span>disk</span><strong>{{ row.disk }}</strong><small>{{ row.diskBytes }}</small></div>
                 <div><span>network</span><strong>↓ {{ row.rx }}</strong><small>↑ {{ row.tx }}</small></div>
                 <div><span>load</span><strong>{{ row.load }}</strong><small>1m / 5m / 15m</small></div>
+                <div v-if="row.gpus"><span>gpu</span><strong>{{ row.gpuUtil }}</strong><small>{{ row.gpus }}× {{ row.gpuName }} · {{ row.gpuTemp }}</small></div>
               </div>
             </v-card>
           </div>
@@ -70,6 +71,20 @@
               :to="to"
             />
           </div>
+          <template v-if="gpuSeriesKeys.length">
+            <h3 class="metrics-section">GPUs <small>one line per GPU · hover a point for the processes</small></h3>
+            <div class="metrics-grid">
+              <MetricsChart title="GPU utilization" :datasets="gpuSeries((p) => p.utilization_gpu_percent)" :format-y="percent" :y-max="100" :from="from" :to="to" />
+              <MetricsChart title="GPU memory used" :datasets="gpuSeries((p) => p.mem_used_bytes)" :format-y="bytes" :from="from" :to="to" />
+              <MetricsChart title="GPU temperature" :datasets="gpuSeries((p) => p.temperature_c)" :format-y="celsius" :from="from" :to="to" />
+              <MetricsChart title="GPU power (dashed: limit)" :datasets="[...gpuSeries((p) => p.power_draw_w), ...gpuSeries((p) => p.power_limit_w, ' limit', true)]" :format-y="watts" :from="from" :to="to" />
+              <MetricsChart title="GPU clock (SM)" :datasets="gpuSeries((p) => p.sm_clock_mhz)" :format-y="mhz" :from="from" :to="to" />
+            </div>
+            <div v-if="throttled.length" class="metrics-throttle">
+              <v-icon small color="orange">mdi-alert</v-icon>
+              throttling in this period: {{ throttled.join(' · ') }}
+            </div>
+          </template>
           <div class="metrics-footer">
             one point every {{ stepLabel }} · data kept for 7 days · refreshes every minute
           </div>
@@ -100,6 +115,8 @@ export default {
       to: Date.now(),
       step: 60,
       results: {},
+      gpus: [],
+      gpuResults: {},
       loading: false,
     }
   },
@@ -139,6 +156,20 @@ export default {
         ...this.series((p) => p.net_tx_bytes_per_sec, ' ↑', true),
       ]
     },
+    // (server, gpu_index) of the selected servers that have samples
+    gpuSeriesKeys() {
+      return this.selected.flatMap((server) => {
+        const points = this.gpuResults[server] || []
+        return [...new Set(points.map((p) => p.gpu_index))].sort().map((gpu) => ({ server, gpu }))
+      })
+    },
+    throttled() {
+      return this.gpuSeriesKeys.flatMap(({ server, gpu }) => {
+        const reasons = new Set((this.gpuResults[server] || []).filter((p) => p.gpu_index === gpu).flatMap((p) => p.throttle_reasons || []))
+        reasons.delete('gpu_idle')
+        return reasons.size ? [`${this.gpuLabel(server, gpu)}: ${[...reasons].join(', ')}`] : []
+      })
+    },
     stepLabel() {
       return this.step >= 3600 ? `${this.step / 3600}h` : this.step >= 60 ? `${this.step / 60} min` : `${this.step}s`
     },
@@ -148,7 +179,14 @@ export default {
         .map((r) => {
           const p = r.points[r.points.length - 1]
           const info = this.servers.find((s) => s.server === r.server)
+          const gpuPoints = this.gpuResults[r.server] || []
+          const lastAt = Math.max(0, ...gpuPoints.map((g) => g.collected_at))
+          const lastGpus = gpuPoints.filter((g) => g.collected_at === lastAt)
           return {
+            gpus: lastGpus.length,
+            gpuName: lastGpus.length ? lastGpus[0].name.replace(/^NVIDIA /, '') : '',
+            gpuUtil: lastGpus.length ? this.percent(Math.max(...lastGpus.map((g) => g.utilization_gpu_percent))) : '',
+            gpuTemp: lastGpus.length ? `${Math.max(...lastGpus.map((g) => g.temperature_c))}°C` : '',
             server: r.server,
             age: `updated ${this.timeSince(info ? info.last_seen : p.collected_at)}`,
             cpu: this.percent(p.cpu_percent),
@@ -193,6 +231,33 @@ export default {
     percent(v) {
       return v === null || v === undefined || isNaN(v) ? '-' : `${Number(v).toFixed(v < 10 ? 1 : 0)}%`
     },
+    celsius(v) {
+      return v === null || v === undefined ? '-' : `${Math.round(v)}°C`
+    },
+    watts(v) {
+      return v === null || v === undefined ? '-' : `${Math.round(v)} W`
+    },
+    mhz(v) {
+      return v === null || v === undefined ? '-' : `${Math.round(v)} MHz`
+    },
+    gpuLabel(server, gpu) {
+      const perServer = this.gpuSeriesKeys.filter((k) => k.server === server).length
+      return perServer > 1 ? `${server} gpu${gpu}` : server
+    },
+    // One dataset per (server, gpu); gpus of the same server share its color in different dashes.
+    gpuSeries(value, suffix = '', dashed = false) {
+      return this.gpuSeriesKeys.map(({ server, gpu }) => {
+        const points = (this.gpuResults[server] || []).filter((p) => p.gpu_index === gpu)
+        const data = []
+        let last = null
+        for (const p of points) {
+          if (last !== null && p.collected_at - last > 2 * this.step * 1000) data.push({ x: last + this.step * 1000, y: null })
+          data.push({ x: p.collected_at, y: value(p), processes: (p.processes || []).map((x) => x.name.split('/').pop()).join(', ') })
+          last = p.collected_at
+        }
+        return { label: this.gpuLabel(server, gpu) + suffix, color: this.color(server, gpu === 0 ? 1 : 0.55), dashed, data }
+      })
+    },
     decimal(v) {
       return v === null || v === undefined ? '-' : Number(v).toFixed(2)
     },
@@ -223,11 +288,11 @@ export default {
     },
     reload() {
       this.loading = true
-      client
-        .get('/metrics/servers')
-        .then((response) => {
+      Promise.all([client.get('/metrics/servers'), client.get('/metrics/gpus')])
+        .then(([servers, gpus]) => {
           const first = !this.servers.length
-          this.servers = response.data.hits
+          this.servers = servers.data.hits
+          this.gpus = gpus.data.hits
           const names = this.servers.map((s) => s.server)
           this.selected = first ? names : this.selected.filter((s) => names.includes(s))
           return this.loadMetrics()
@@ -241,15 +306,16 @@ export default {
       const to = Date.now()
       const from = to - this.range * 3600 * 1000
       this.loading = true
-      return Promise.all(
-        this.selected.map((server) =>
-          client.get('/metrics', { params: { server, from, to } }).then((response) => response.data)
-        )
-      )
-        .then((results) => {
+      const withGpu = this.selected.filter((server) => this.gpus.some((g) => g.server === server))
+      return Promise.all([
+        Promise.all(this.selected.map((server) => client.get('/metrics', { params: { server, from, to } }).then((response) => response.data))),
+        Promise.all(withGpu.map((server) => client.get('/metrics/gpus/samples', { params: { server, from, to } }).then((response) => [server, response.data.hits]))),
+      ])
+        .then(([results, gpuResults]) => {
           const byServer = {}
           results.forEach((r) => (byServer[r.server] = r))
           this.results = byServer
+          this.gpuResults = Object.fromEntries(gpuResults)
           this.from = from
           this.to = to
           if (results.length) this.step = results[0].step
@@ -356,6 +422,25 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(520px, 100%), 1fr));
   gap: 12px;
+}
+
+.metrics-section {
+  margin: 18px 0 10px;
+  color: #33563f;
+  font-size: 16px;
+
+  small {
+    font-weight: normal;
+    font-size: 12px;
+    color: #5a7563;
+    margin-left: 8px;
+  }
+}
+
+.metrics-throttle {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #8a5a00;
 }
 
 .metrics-footer {

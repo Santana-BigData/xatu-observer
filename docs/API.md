@@ -208,6 +208,28 @@ curl -s "${auth[@]}" "$X/metrics/containers/samples?name=yeshua-2-gitlab-main&fr
 
 ---
 
+## GPUs
+
+Placas NVIDIA dos servidores e dos mineradores, uma amostra por GPU por minuto, 7 dias.
+
+| Rota | Descrição |
+|---|---|
+| `GET /metrics/gpus` | GPUs vistas nos últimos 7 dias: `server`, `gpu_index`, `uuid`, `name`, `driver_version`, `mem_total_bytes`, `last_seen`. |
+| `GET /metrics/gpus/samples?server=&from=&to=&step=` | Amostras de todas as GPUs de um servidor, da mais antiga para a mais recente, com média por `step` segundos (sem `step`, o Xatu escolhe um que dê até ~720 pontos por GPU). Máximo: 8 dias. |
+
+Campos de uma amostra: `gpu_index`, `uuid`, `name`, `utilization_gpu_percent`, `utilization_mem_percent`, `mem_used_bytes`, `mem_total_bytes`, `temperature_c`, `power_draw_w`, `power_limit_w`, `fan_percent` (ausente em placas passivas como a K80), `sm_clock_mhz`, `mem_clock_mhz`, `pstate` (`P0` = desempenho máximo, `P8` = ociosa), `throttle_reasons` (lista, por exemplo `hw_thermal_slowdown` ou `sw_power_cap`; vazia quando a placa roda livre) e `processes` (processos usando a GPU: `pid`, `name`, `mem_used_bytes`).
+
+```bash
+# GPU mais quente de cada minerador agora
+for s in wl3-worker-6 wl3-worker-7 wl3-worker-8; do
+  TO=$(date +%s000); FROM=$((TO - 120000))
+  curl -s "${auth[@]}" "$X/metrics/gpus/samples?server=$s&from=$FROM&to=$TO&step=60" \
+    | jq -r --arg s "$s" '[.hits[]] | max_by(.temperature_c) | "\($s) gpu\(.gpu_index) \(.name): \(.temperature_c)°C, \(.utilization_gpu_percent)% busy, \(.processes | map(.name | split("/") | last) | join(","))"'
+done
+```
+
+---
+
 ## Status de services, APIs e containers
 
 Cada servidor verifica o que roda nele e o resultado vem **por servidor**, junto com um status geral.

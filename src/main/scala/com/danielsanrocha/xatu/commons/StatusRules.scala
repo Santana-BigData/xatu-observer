@@ -1,6 +1,6 @@
 package com.danielsanrocha.xatu.commons
 
-import com.danielsanrocha.xatu.models.internals.{CheckKind, SentAlert, ServerCheck, XatuServerInfo}
+import com.danielsanrocha.xatu.models.internals.{CheckKind, MetricsServer, SentAlert, ServerCheck, XatuServerInfo}
 
 /** How the checks of every server become one status and the alerts sent to telegram. */
 object StatusRules {
@@ -60,6 +60,19 @@ object StatusRules {
     }
 
     targetProblems ++ downServers
+  }
+
+  /**
+   * Agents (miners) only send metrics, no heartbeat in redis: one that stopped sampling for
+   * `staleMillis` is a problem. Servers that run a full Xatu are covered by the heartbeat.
+   */
+  def staleAgents(metricsServers: Seq[MetricsServer], xatuServers: Seq[XatuServerInfo], now: Long, staleMillis: Long): Seq[Problem] = {
+    val withXatu = xatuServers.map(_.server).toSet
+    metricsServers
+      .filterNot(m => withXatu.contains(m.server))
+      .filter(m => now - m.lastSeen > staleMillis)
+      .sortBy(_.server)
+      .map(m => Problem(s"agent::${m.server}", s"Agent on ${m.server} stopped sending metrics ${(now - m.lastSeen) / 60000} minutes ago"))
   }
 
   case class Plan(send: Seq[Problem], resolved: Seq[(String, SentAlert)])

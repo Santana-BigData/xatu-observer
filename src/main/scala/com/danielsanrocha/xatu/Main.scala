@@ -7,8 +7,8 @@ import scala.io.Source
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import com.danielsanrocha.xatu.commons.{CassandraMigrator, Security}
-import com.danielsanrocha.xatu.repositories.{CassandraSession, LogRepository, LogRepositoryDummyImpl, LogRepositoryImpl}
+import com.danielsanrocha.xatu.commons.{CassandraMigrator, ContainerStatsReader, NvidiaSmiReader, Security, SystemMetricsReader}
+import com.danielsanrocha.xatu.repositories.{CassandraSession, ContainerMetricsRepositoryImpl, GpuMetricsRepositoryImpl, LogRepository, LogRepositoryDummyImpl, LogRepositoryImpl, MetricsRepositoryImpl}
 import com.typesafe.config.{Config, ConfigFactory}
 
 import java.util.Scanner
@@ -22,6 +22,8 @@ object Main extends App {
   createTables: Create tables on the database.
   createIndex: Create ES index for logs.
   cassandraMigrate: Create/update the cassandra schema (src/main/resources/cassandra).
+  agent: Collect only (server, gpu and docker metrics into cassandra), for machines without
+         mysql/redis/elasticsearch like the gpu miners. Needs SERVER and CASSANDRA_* set.
   createUser: Create an user, you will be prompt for the info.
 
   """
@@ -60,6 +62,36 @@ object Main extends App {
     }
     cassandra.close()
     sys.exit(exitCode)
+  } else if (args(0) == "agent") {
+    val server = (if (conf.hasPath("server")) Some(conf.getString("server")).filter(_.nonEmpty) else None)
+      .getOrElse(java.net.InetAddress.getLocalHost.getHostName)
+    val interval = conf.getInt("metrics.interval_seconds")
+    logging.info(s"Starting agent for server $server, one sample every $interval seconds...")
+
+    val cassandra = CassandraSession.fromConfig(conf)
+    if (cassandra.session.isEmpty) {
+      logging.error("Could not connect to cassandra, check CASSANDRA_CONTACT_POINTS and CASSANDRA_DATACENTER.")
+      sys.exit(1)
+    }
+
+    val reader = new SystemMetricsReader(
+      server = server,
+      netInterfaces = conf.getString("metrics.net_interfaces").split(",").map(_.trim).filter(_.nonEmpty).toSeq,
+      diskPath = conf.getString("metrics.disk_path")
+    )
+    new MetricsCollector(reader, new MetricsRepositoryImpl(cassandra), interval).start()
+
+    val nvidia = new NvidiaSmiReader(server, conf.getString("metrics.nvidia_smi"))
+    if (nvidia.available) new GpuMetricsCollector(nvidia, new GpuMetricsRepositoryImpl(cassandra), interval).start()
+    else logging.info("No NVIDIA GPU found (nvidia-smi), gpu metrics are not collected.")
+
+    ContainerStatsReader.dockerUrl(sys.env.get("DOCKER_HOST")) match {
+      case Some(url) => new ContainerMetricsCollector(new ContainerStatsReader(server, url), new ContainerMetricsRepositoryImpl(cassandra), interval).start()
+      case None      => logging.info("DOCKER_HOST is not a tcp address, docker container metrics are not collected.")
+    }
+
+    // the collectors run in their own threads; the main thread just waits
+    Thread.currentThread().join()
   } else {
     logging.info("Loading slick MySQLClient...")
     implicit val client: Database = Database.forConfig("mysql")

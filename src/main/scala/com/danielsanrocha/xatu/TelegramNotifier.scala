@@ -3,7 +3,7 @@ package com.danielsanrocha.xatu
 import com.danielsanrocha.xatu.commons.StatusRules
 import com.danielsanrocha.xatu.commons.StatusRules.Target
 import com.danielsanrocha.xatu.models.internals.{CheckKind, SentAlert}
-import com.danielsanrocha.xatu.repositories.{APIRepository, ContainerRepository, ServiceRepository, StatusRepository}
+import com.danielsanrocha.xatu.repositories.{APIRepository, ContainerRepository, MetricsRepository, ServiceRepository, StatusRepository}
 import com.typesafe.scalalogging.Logger
 import scalaj.http.{Http, HttpOptions}
 
@@ -23,7 +23,9 @@ class TelegramNotifier(
     serviceRepository: ServiceRepository,
     apiRepository: APIRepository,
     containerRepository: ContainerRepository,
-    repeatMinutes: Long
+    metricsRepository: MetricsRepository,
+    repeatMinutes: Long,
+    agentStaleMinutes: Long
 )(implicit val ec: ExecutionContext)
     extends Periodic("TelegramNotifier", 60) {
   private val logging: Logger = Logger(this.getClass)
@@ -43,8 +45,11 @@ class TelegramNotifier(
     if (!leader.isLeader) logging.debug("Not the leader, not sending notifications.")
     else {
       val checks = Seq(CheckKind.Service, CheckKind.API, CheckKind.Container).map(k => k -> statusRepository.checks(k)).toMap
-      val problems = StatusRules.problems(targets(), checks, statusRepository.servers())
       val now = System.currentTimeMillis()
+      val xatuServers = statusRepository.servers()
+      val agents = Await.result(metricsRepository.servers(), 30.seconds)
+      val problems = StatusRules.problems(targets(), checks, xatuServers) ++
+        StatusRules.staleAgents(agents, xatuServers, now, agentStaleMinutes * 60 * 1000)
       val plan = StatusRules.plan(problems, statusRepository.sentAlerts(), now, repeatMinutes * 60 * 1000)
 
       logging.info(s"${problems.size} problems, sending ${plan.send.size} alerts and ${plan.resolved.size} resolved")

@@ -109,6 +109,30 @@ you will be prompted asking for the name, email and password.
 
 The HTTP API is documented in [docs/API.md](docs/API.md) (also in the "API docs" page of the interface). Integrations authenticate with permanent tokens created in the "Tokens" page and sent as `Authorization: Bearer xatu_...`; only the sha-256 of each token is stored (table `tb_api_tokens`, created by `createTables`).
 
+## Agent mode (GPU miners and other machines without mysql/redis)
+
+`java -Xmx256m -jar xatu.jar agent` collects only: server metrics (cpu, memory, disk, network), NVIDIA GPU metrics when `nvidia-smi` reports a GPU, and docker container metrics when `DOCKER_HOST` is a tcp address. It needs just `SERVER` and `CASSANDRA_CONTACT_POINTS` (plus `CASSANDRA_DATACENTER` if not `datacenter1`); there is no API, mysql, redis or elasticsearch. The metrics show up in the "Metrics" page like any other server, and the telegram leader alerts when an agent stops sending metrics for `TELEGRAM_AGENT_STALE_MINUTES` (default 5).
+
+GPU metrics (one row per GPU per minute, 7 days): utilization, memory, temperature, power, fan, clocks, P-state, throttle reasons and the processes using the GPU (`nvidia-smi --query-compute-apps`). The full Xatu also collects them on any server that has `nvidia-smi` (`NVIDIA_SMI` sets the binary).
+
+Example unit for a miner:
+
+```
+[Unit]
+Description=Xatu agent
+After=network-online.target
+
+[Service]
+User=xatu
+Restart=always
+Environment="SERVER=wl3-worker-6"
+Environment="CASSANDRA_CONTACT_POINTS=10.200.200.1,10.200.200.2,10.200.200.4"
+ExecStart=/usr/bin/java -Xmx256m -jar /home/xatu/xatu.jar agent
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## Running on more than one server
 
 Xatu can run on several servers sharing the same mysql (e.g. galera), redis and elasticsearch. Each instance must have a different `SERVER`.
@@ -213,6 +237,8 @@ LOG_LEVEL=trace make test-integration-docker
 - METRICS_INTERVAL_SECONDS: Seconds between two metrics samples (default 60).
 - METRICS_NET_INTERFACES: Comma separated network interfaces summed in the network chart. Empty (default) = all physical interfaces, which leaves out loopback, docker bridges, veth and vpn tunnels.
 - METRICS_DISK_PATH: Path whose filesystem is used for disk usage (default `/`).
+- NVIDIA_SMI: nvidia-smi binary for GPU metrics (default `nvidia-smi`; skipped when it is missing or reports no GPU).
+- TELEGRAM_AGENT_STALE_MINUTES: Minutes without metrics before alerting that an agent stopped (default 5).
 - SERVER: Name of this server (hostname when not set). It names the checks of this server, is saved in the `server` field of each log in elasticsearch and names the server metrics. Must be different on each server.
 
 ## Tips

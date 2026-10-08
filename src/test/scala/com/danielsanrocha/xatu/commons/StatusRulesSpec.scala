@@ -2,7 +2,7 @@ package com.danielsanrocha.xatu.commons
 
 import com.danielsanrocha.xatu.UnitSpec
 import com.danielsanrocha.xatu.commons.StatusRules.{Problem, Target}
-import com.danielsanrocha.xatu.models.internals.{CheckKind, SentAlert, ServerCheck, XatuServerInfo}
+import com.danielsanrocha.xatu.models.internals.{CheckKind, MetricsServer, SentAlert, ServerCheck, XatuServerInfo}
 
 import scala.concurrent.Future
 
@@ -71,6 +71,24 @@ class StatusRulesSpec extends UnitSpec {
       Future {
         val servers = alive :+ XatuServerInfo("s4", alive = false, None)
         StatusRules.problems(targets, Map(), servers).map(_.key) should equal(Seq("server::s4"))
+      }
+    }
+  }
+
+  describe("staleAgents") {
+    it("should alert agents without recent metrics, ignoring servers that have a xatu heartbeat") {
+      Future {
+        val minute = 60 * 1000L
+        val now = 100 * minute
+        val metrics = Seq(
+          MetricsServer("wl3-worker-6", now - 9 * minute, 12, 1),
+          MetricsServer("wl3-worker-7", now - 1 * minute, 12, 1),
+          MetricsServer("wl3-big-server-1", now - 30 * minute, 16, 1)
+        )
+        val xatus = Seq(XatuServerInfo("wl3-big-server-1", alive = false, None))
+        StatusRules.staleAgents(metrics, xatus, now, 5 * minute) should equal(
+          Seq(Problem("agent::wl3-worker-6", "Agent on wl3-worker-6 stopped sending metrics 9 minutes ago"))
+        )
       }
     }
   }

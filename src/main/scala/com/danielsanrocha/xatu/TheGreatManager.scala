@@ -1,7 +1,7 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.{ContainerStatsReader, RedisPool, SystemMetricsReader}
-import com.danielsanrocha.xatu.controllers.{ContainerMetricsController, MetricsController, StatusController}
+import com.danielsanrocha.xatu.commons.{ContainerStatsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
+import com.danielsanrocha.xatu.controllers.{ContainerMetricsController, GpuMetricsController, MetricsController, StatusController}
 import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
   APIRepository,
@@ -13,6 +13,9 @@ import com.danielsanrocha.xatu.repositories.{
   ContainerMetricsRepository,
   ContainerMetricsRepositoryDummyImpl,
   ContainerMetricsRepositoryImpl,
+  GpuMetricsRepository,
+  GpuMetricsRepositoryDummyImpl,
+  GpuMetricsRepositoryImpl,
   MetricsRepository,
   MetricsRepositoryDummyImpl,
   MetricsRepositoryImpl,
@@ -67,6 +70,8 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
     if (cassandraActive) new MetricsRepositoryImpl(cassandraSession) else new MetricsRepositoryDummyImpl()
   implicit val containerMetricsRepository: ContainerMetricsRepository =
     if (cassandraActive) new ContainerMetricsRepositoryImpl(cassandraSession) else new ContainerMetricsRepositoryDummyImpl()
+  implicit val gpuMetricsRepository: GpuMetricsRepository =
+    if (cassandraActive) new GpuMetricsRepositoryImpl(cassandraSession) else new GpuMetricsRepositoryDummyImpl()
 
   logging.info("Instantiating docker client...")
   implicit val dockerClient: DockerClient = DockerClientBuilder.getInstance.build
@@ -105,7 +110,9 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
         serviceRepository,
         apiRepository,
         containerRepository,
-        conf.getLong("telegram.repeat_minutes")
+        metricsRepository,
+        conf.getLong("telegram.repeat_minutes"),
+        conf.getLong("telegram.agent_stale_minutes")
       ).start()
     } else {
       logging.info("Telegram token is to inactive.")
@@ -118,6 +125,10 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
         diskPath = conf.getString("metrics.disk_path")
       )
       new MetricsCollector(reader, metricsRepository, metricsInterval).start()
+
+      val nvidia = new NvidiaSmiReader(server, conf.getString("metrics.nvidia_smi"))
+      if (nvidia.available) new GpuMetricsCollector(nvidia, gpuMetricsRepository, metricsInterval).start()
+      else logging.info("No NVIDIA GPU found (nvidia-smi), gpu metrics are not collected.")
 
       ContainerStatsReader.dockerUrl(sys.env.get("DOCKER_HOST")) match {
         case Some(url) =>
@@ -142,4 +153,5 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   val statusController = new StatusController(server)
   val metricsController = new MetricsController(metricsInterval)
   val containerMetricsController = new ContainerMetricsController(metricsInterval)
+  val gpuMetricsController = new GpuMetricsController(metricsInterval)
 }
