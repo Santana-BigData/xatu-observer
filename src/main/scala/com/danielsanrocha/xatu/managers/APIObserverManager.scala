@@ -6,9 +6,9 @@ import com.danielsanrocha.xatu.observers.APIObserver
 import com.danielsanrocha.xatu.repositories.StatusRepository
 import com.danielsanrocha.xatu.services.APIService
 
-class APIObserverManager(server: String, statusRepository: StatusRepository)(implicit val service: APIService, override implicit val ec: scala.concurrent.ExecutionContext)
+class APIObserverManager(server: String, statusRepository: StatusRepository, failuresToFail: Int)(implicit val service: APIService, override implicit val ec: scala.concurrent.ExecutionContext)
     extends Manager[API, APIObserver](service, ec) {
   private val logging: Logger = Logger(this.getClass)
   logging.info("Starting APIObserverManager...")
-  override def createObserver(data: API): APIObserver = new APIObserver(data, server, statusRepository, ec)
+  override def createObserver(data: API): APIObserver = new APIObserver(data, server, statusRepository, failuresToFail)
 }

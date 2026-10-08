@@ -93,6 +93,27 @@ class StatusRulesSpec extends UnitSpec {
     }
   }
 
+  describe("confirmedKeys") {
+    it("should confirm only problems seen in every one of the last rounds") {
+      Future {
+        StatusRules.confirmedKeys(Seq(Set("a")), 2) shouldBe empty
+        StatusRules.confirmedKeys(Seq(Set("a", "b"), Set("b", "c")), 2) should equal(Set("b"))
+        StatusRules.confirmedKeys(Seq(Set("a"), Set("a", "b"), Set("b")), 2) should equal(Set("b"))
+      }
+    }
+
+    it("should not send an unconfirmed problem but still resolve it") {
+      Future {
+        val minute = 60 * 1000L
+        val flapping = Problem("api::3", "sysjud down")
+        val plan = StatusRules.plan(Seq(flapping), Map(), minute, 30 * minute, confirmed = Set.empty)
+        plan.send shouldBe empty
+        // an alert sent before for something no longer failing is resolved regardless of confirmation
+        StatusRules.plan(Seq(), Map("api::3" -> SentAlert(0, "sysjud down")), minute, 30 * minute, Set.empty).resolved.map(_._1) should equal(Seq("api::3"))
+      }
+    }
+  }
+
   describe("plan") {
     val minute = 60 * 1000L
     val p1 = Problem("service::34::s2", "webmail down")
@@ -101,15 +122,16 @@ class StatusRulesSpec extends UnitSpec {
     it("should send new problems and repeat old ones after the repeat time") {
       Future {
         val sent = Map("service::34::s2" -> SentAlert(0, "webmail down"), "api::3" -> SentAlert(25 * minute, "sysjud down"))
-        StatusRules.plan(Seq(p1, p2), sent, 30 * minute, 30 * minute).send should equal(Seq(p1))
-        StatusRules.plan(Seq(p1, p2), Map(), 0, 30 * minute).send should equal(Seq(p1, p2))
+        val all = Set(p1.key, p2.key)
+        StatusRules.plan(Seq(p1, p2), sent, 30 * minute, 30 * minute, all).send should equal(Seq(p1))
+        StatusRules.plan(Seq(p1, p2), Map(), 0, 30 * minute, all).send should equal(Seq(p1, p2))
       }
     }
 
     it("should resolve alerts that are not a problem anymore") {
       Future {
         val sent = Map("service::34::s2" -> SentAlert(0, "webmail down"), "api::3" -> SentAlert(0, "sysjud down"))
-        val plan = StatusRules.plan(Seq(p2), sent, minute, 30 * minute)
+        val plan = StatusRules.plan(Seq(p2), sent, minute, 30 * minute, Set(p2.key))
         plan.send shouldBe empty
         plan.resolved should equal(Seq("service::34::s2" -> SentAlert(0, "webmail down")))
       }

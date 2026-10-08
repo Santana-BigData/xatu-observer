@@ -218,6 +218,10 @@ LOG_LEVEL=trace make test-integration-docker
 - ELASTIC_SEARCH_PORT: Port for elasticsearch.
 - ELASTIC_SEARCH_LOG_INDEX: elasticsearch index name. Need not be already created.
 - ELASTICSEARCH_ACTIVE: Set to "false" to deactivate ElasticSearch.
+- ELASTICSEARCH_BULK_SIZE / ELASTICSEARCH_BULK_INTERVAL_MS: Logs are sent with the bulk api, up to this many lines (default 500) every this many ms (default 1000).
+- ELASTICSEARCH_QUEUE_SIZE: Lines waiting in memory to be sent (default 20000). When elasticsearch cannot keep up the excess is dropped and counted in the Xatu log, instead of blocking the observers.
+- API_CHECK_FAILURES_TO_FAIL: Failed checks in a row before an API is reported as failing (default 3). Each check retries 3 times.
+- TELEGRAM_CONFIRM_ROUNDS: Rounds (1 minute each) a problem must be seen in a row before it is alerted (default 2).
 - ELASTICSEARCH_SEARCH_SIZE: Default max number of logs returned by a search (default 500, max 10000). Can be overridden per search with the `size` query param.
 - ELASTICSEARCH_USER: User for elasticsearch (basic auth), do not set if elasticsearch has no authentication.
 - ELASTICSEARCH_PASSWORD: Password for elasticsearch user.

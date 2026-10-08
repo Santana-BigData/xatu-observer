@@ -1,5 +1,6 @@
 package com.danielsanrocha.xatu.repositories
 
+import com.danielsanrocha.xatu.commons.LogBatcher
 import com.danielsanrocha.xatu.exceptions.BadArgumentException
 import com.danielsanrocha.xatu.models.internals.{Log, LogContainer, LogService}
 import com.fasterxml.jackson.databind.json.JsonMapper
@@ -39,6 +40,39 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
 
   private val indexMapping = Source.fromResource("logIndex.json").mkString
 
+  /** Lines are queued and sent in _bulk by one thread; see LogBatcher. */
+  private val batcher = new LogBatcher[(String, String)](
+    capacity = conf.getInt(s"$config.queue_size"),
+    batchSize = conf.getInt(s"$config.bulk_size"),
+    flushMillis = conf.getLong(s"$config.bulk_interval_ms"),
+    send = bulk,
+    name = "elasticsearch-bulk"
+  ).start()
+
+  /** Sends a batch with the bulk api, returns how many documents were not indexed. */
+  private def bulk(docs: Seq[(String, String)]): Int = {
+    val body = docs.map { case (id, json) => s"""{"index":{"_index":"$esIndex","_id":"$id"}}\n$json\n""" }.mkString
+    val result = request(s"$esHost:$esPort/_bulk")
+      .option(HttpOptions.connTimeout(10000))
+      .option(HttpOptions.readTimeout(30000))
+      .header("content-type", "application/x-ndjson")
+      .postData(body)
+      .execute()
+    if (result.code != 200) throw new Exception(s"Elasticsearch returned status ${result.code} on _bulk: ${result.body.take(200)}")
+    val response = ujson.read(result.body)
+    if (!response("errors").bool) 0
+    else {
+      val failed = response("items").arr.map(_("index")).filter(i => i("status").num >= 300)
+      failed.headOption.foreach(i => logging.error(s"ES bulk error: ${i.obj.get("error").map(_.render()).getOrElse("?").take(300)}"))
+      failed.size
+    }
+  }
+
+  private def enqueue(documentId: String, json: String): Future[Unit] = {
+    batcher.offer((documentId, json))
+    Future.unit
+  }
+
   def createIndex(): Future[Unit] = {
     Future {
       try {
@@ -63,41 +97,11 @@ class LogRepositoryImpl(config: String, implicit val ec: scala.concurrent.Execut
     }
   }
 
-  override def create(documentId: String, log: LogService): Future[Unit] = {
-    Future {
-      val route = s"$esHost:$esPort/$esIndex/_doc/$documentId"
-      logging.debug(s"Indexing log on route $route...")
-      val result = request(route)
-        .option(HttpOptions.connTimeout(10000))
-        .option(HttpOptions.readTimeout(10000))
-        .header("content-type", "application/json")
-        .put(jsonMapper.writeValueAsString(log.copy(server = server)))
-        .execute()
+  override def create(documentId: String, log: LogService): Future[Unit] =
+    enqueue(documentId, jsonMapper.writeValueAsString(log.copy(server = server)))
 
-      if (result.code != 201) {
-        logging.error(s"ES Response: ${result.body}")
-        throw new Exception(s"Elasticsearch returned status ${result.code} while indexing document with name $documentId")
-      }
-    }
-  }
-
-  override def create(documentId: String, log: LogContainer): Future[Unit] = {
-    Future {
-      val route = s"$esHost:$esPort/$esIndex/_doc/$documentId"
-      logging.debug(s"Indexing log on route $route...")
-      val result = request(route)
-        .option(HttpOptions.connTimeout(10000))
-        .option(HttpOptions.readTimeout(10000))
-        .header("content-type", "application/json")
-        .put(jsonMapper.writeValueAsString(log.copy(server = server)))
-        .execute()
-
-      if (result.code != 201) {
-        logging.error(s"ES Response: ${result.body}")
-        throw new Exception(s"Elasticsearch returned status ${result.code} while indexing document with name $documentId")
-      }
-    }
-  }
+  override def create(documentId: String, log: LogContainer): Future[Unit] =
+    enqueue(documentId, jsonMapper.writeValueAsString(log.copy(server = server)))
 
   override def search(query: String, size: Option[Int]): Future[Seq[Log]] = {
     Future {

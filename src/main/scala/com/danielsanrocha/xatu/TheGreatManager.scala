@@ -85,7 +85,7 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   logging.info("Loading configuration file and accessing it...")
 
   logging.info("Instantiating Observers Managers...")
-  private implicit val apiObserverManager: APIObserverManager = new APIObserverManager(server, statusRepository)
+  private implicit val apiObserverManager: APIObserverManager = new APIObserverManager(server, statusRepository, conf.getInt("api.check_failures_to_fail"))
   private implicit val logServiceManager: LogServiceObserverManager = new LogServiceObserverManager()
   private implicit val serviceObserverManager: ServiceObserverManager = new ServiceObserverManager(server, statusRepository)
   private implicit val logContainerManager: LogContainerObserverManager = new LogContainerObserverManager()
@@ -112,7 +112,8 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
         containerRepository,
         metricsRepository,
         conf.getLong("telegram.repeat_minutes"),
-        conf.getLong("telegram.agent_stale_minutes")
+        conf.getLong("telegram.agent_stale_minutes"),
+        conf.getInt("telegram.confirm_rounds")
       ).start()
     } else {
       logging.info("Telegram token is to inactive.")

@@ -78,14 +78,23 @@ object StatusRules {
   case class Plan(send: Seq[Problem], resolved: Seq[(String, SentAlert)])
 
   /**
-   * Which problems to send now: new ones, and the ones still happening every `repeatMillis`.
-   * Alerts sent before and not a problem anymore are resolved.
+   * Which problems to send now: the confirmed ones that are new, and the ones still
+   * happening every `repeatMillis`. Alerts sent before and not a problem anymore (even an
+   * unconfirmed one) are resolved.
+   *
+   * `confirmed` are the keys seen in enough consecutive rounds; a problem seen once (one
+   * bad minute) is not sent.
    */
-  def plan(current: Seq[Problem], sent: Map[String, SentAlert], now: Long, repeatMillis: Long): Plan = {
+  def plan(current: Seq[Problem], sent: Map[String, SentAlert], now: Long, repeatMillis: Long, confirmed: Set[String]): Plan = {
     val currentKeys = current.map(_.key).toSet
     Plan(
-      send = current.filter(p => sent.get(p.key).forall(a => now - a.at >= repeatMillis)),
+      send = current.filter(p => confirmed.contains(p.key) && sent.get(p.key).forall(a => now - a.at >= repeatMillis)),
       resolved = sent.toSeq.filterNot { case (key, _) => currentKeys.contains(key) }.sortBy(_._1)
     )
   }
+
+  /** Keys present in each of the last `rounds` lists (the newest last). */
+  def confirmedKeys(rounds: Seq[Set[String]], required: Int): Set[String] =
+    if (rounds.size < required) Set.empty
+    else rounds.takeRight(required).reduce(_ intersect _)
 }

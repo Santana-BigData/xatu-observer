@@ -25,10 +25,14 @@ class TelegramNotifier(
     containerRepository: ContainerRepository,
     metricsRepository: MetricsRepository,
     repeatMinutes: Long,
-    agentStaleMinutes: Long
+    agentStaleMinutes: Long,
+    confirmRounds: Int
 )(implicit val ec: ExecutionContext)
     extends Periodic("TelegramNotifier", 60) {
   private val logging: Logger = Logger(this.getClass)
+
+  // problem keys of the last rounds: a problem is alerted only after `confirmRounds` rounds in a row
+  private var rounds: Seq[Set[String]] = Seq()
 
   private def targets(): Seq[Target] = {
     val all = for {
@@ -50,9 +54,11 @@ class TelegramNotifier(
       val agents = Await.result(metricsRepository.servers(), 30.seconds)
       val problems = StatusRules.problems(targets(), checks, xatuServers) ++
         StatusRules.staleAgents(agents, xatuServers, now, agentStaleMinutes * 60 * 1000)
-      val plan = StatusRules.plan(problems, statusRepository.sentAlerts(), now, repeatMinutes * 60 * 1000)
+      rounds = (rounds :+ problems.map(_.key).toSet).takeRight(confirmRounds)
+      val confirmed = StatusRules.confirmedKeys(rounds, confirmRounds)
+      val plan = StatusRules.plan(problems, statusRepository.sentAlerts(), now, repeatMinutes * 60 * 1000, confirmed)
 
-      logging.info(s"${problems.size} problems, sending ${plan.send.size} alerts and ${plan.resolved.size} resolved")
+      logging.info(s"${problems.size} problems (${confirmed.size} confirmed), sending ${plan.send.size} alerts and ${plan.resolved.size} resolved")
 
       plan.send.foreach { p =>
         notify(s"🔴 ${p.message}")
