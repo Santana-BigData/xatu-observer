@@ -55,6 +55,34 @@ class ContainerMetricsControllerSpec extends UnitSpec with TestController {
     }
   }
 
+  describe("GET /api/metrics/containers/overview search") {
+    it("should filter by words in name/image/id, by server and by exact name") {
+      implicit val repository: ContainerMetricsRepository = mock[ContainerMetricsRepository]
+      when(repository.inventory()).thenReturn(
+        Future.successful(
+          Seq(
+            ContainerLocation("yeshua-483-n8n-pedropedro-main", "wl3-big-server-4", "73e0", "n8nio/n8n:latest", None, 1),
+            ContainerLocation("yeshua-2-gitlab-main", "wl3-big-server-4", "e486", "gitlab/gitlab-ce", None, 1),
+            ContainerLocation("yeshua-569-n8n-weelbaerg-main", "wl3-big-server-1", "a1b2", "n8nio/n8n:latest", None, 1)
+          )
+        )
+      )
+      when(repository.byServer(anyString(), anyLong(), anyLong())).thenReturn(Future.successful(Seq()))
+      val server = createServer(new ContainerMetricsController(60))
+      def names(query: String) =
+        ujson.read(server.httpGet(s"/api/metrics/containers/overview$query", andExpect = Status.Ok).contentString)("hits").arr.map(_("container_name").str).toSeq
+
+      Future {
+        names("?q=n8n") should equal(Seq("yeshua-483-n8n-pedropedro-main", "yeshua-569-n8n-weelbaerg-main"))
+        names("?q=N8N%20pedro") should equal(Seq("yeshua-483-n8n-pedropedro-main"))
+        names("?q=n8n&server=wl3-big-server-1") should equal(Seq("yeshua-569-n8n-weelbaerg-main"))
+        names("?q=e486") should equal(Seq("yeshua-2-gitlab-main"))
+        names("?name=yeshua-2-gitlab-main") should equal(Seq("yeshua-2-gitlab-main"))
+        names("?name=yeshua-2") shouldBe empty
+      }
+    }
+  }
+
   describe("GET /api/metrics/containers/samples") {
     it("should return the samples of a container by name in snake_case") {
       implicit val repository: ContainerMetricsRepository = mock[ContainerMetricsRepository]

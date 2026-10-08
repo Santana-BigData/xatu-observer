@@ -3,7 +3,7 @@ package com.danielsanrocha.xatu.controllers
 import com.danielsanrocha.xatu.commons.ContainerMetricsAggregator
 import com.danielsanrocha.xatu.exceptions.BadArgumentException
 import com.danielsanrocha.xatu.models.internals.{ContainerOverview, RequestId}
-import com.danielsanrocha.xatu.models.requests.ContainerSamplesRequest
+import com.danielsanrocha.xatu.models.requests.{ContainerOverviewRequest, ContainerSamplesRequest}
 import com.danielsanrocha.xatu.models.responses.HitsResult
 import com.danielsanrocha.xatu.repositories.ContainerMetricsRepository
 import com.twitter.finagle.context.Contexts
@@ -30,13 +30,19 @@ class ContainerMetricsController(intervalSeconds: Long)(implicit val repository:
    * Every container of the inventory with its latest sample, for the containers page:
    * one query per server over the last minutes instead of one per container.
    */
-  get("/api/metrics/containers/overview") { _: Request =>
+  get("/api/metrics/containers/overview") { request: ContainerOverviewRequest =>
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) Container overview route called...")
     val now = System.currentTimeMillis()
     val window = math.max(5 * 60, 3 * intervalSeconds) * 1000
 
-    repository.inventory() flatMap { inventory =>
+    val terms = request.q.toSeq.flatMap(_.toLowerCase.split("\\s+")).filter(_.nonEmpty)
+    val servers = request.server.toSeq.flatMap(_.split(",")).map(_.trim).filter(_.nonEmpty).toSet
+
+    repository.inventory().map(_.filter { c =>
+      val text = s"${c.containerName} ${c.image} ${c.containerId}".toLowerCase
+      request.name.forall(_ == c.containerName) && (servers.isEmpty || servers.contains(c.server)) && terms.forall(text.contains)
+    }) flatMap { inventory =>
       Future.sequence(inventory.map(_.server).distinct.map(server => repository.byServer(server, now - window, now))) map { samples =>
         val latest = samples.flatten.groupBy(s => (s.containerName, s.server)).view.mapValues(_.maxBy(_.collectedAt)).toMap
         val rows = inventory.map { c =>

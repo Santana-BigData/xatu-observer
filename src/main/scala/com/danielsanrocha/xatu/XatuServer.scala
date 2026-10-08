@@ -77,7 +77,9 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
   logging.info("Instantiating filters...")
   private val exceptionHandlerFilter = new ExceptionHandlerFilter()
   private val requestIdFilter = new RequestIdFilter()
-  private val authorizeFilter = new AuthorizeFilter(authorizationHeader, cache)
+  private val apiTokenService = new ApiTokenService(new ApiTokenRepositoryImpl())
+  private val apiTokenController = new ApiTokenController(apiTokenService)
+  private val authorizeFilter = new AuthorizeFilter(authorizationHeader, cache, apiTokenService)
   private val corsFilter = new CORSFilter()
 
   private val timeout = conf.getLong("api.timeout")
@@ -99,6 +101,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
       .add(authorizeFilter, greatManager.statusController)
       .add(authorizeFilter, greatManager.metricsController)
       .add(authorizeFilter, greatManager.containerMetricsController)
+      .add(authorizeFilter, apiTokenController)
       .add(healthcheckController)
       .add(webController)
       .add(notFoundController)
