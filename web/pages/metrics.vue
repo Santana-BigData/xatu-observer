@@ -3,18 +3,22 @@
     <v-col cols="12">
       <v-card elevation="2" id="metrics-container-card">
         <div class="metrics-toolbar">
-          <div class="metrics-servers">
-            <span class="toolbar-label">servers</span>
-            <v-chip
-              v-for="s in servers"
-              :key="s.server"
-              small
-              :outlined="!selected.includes(s.server)"
-              :style="chipStyle(s.server)"
-              @click="toggleServer(s.server)"
-            >
-              <v-icon x-small left>mdi-server-network</v-icon>{{ s.server }}
-            </v-chip>
+          <div class="metrics-groups">
+            <div v-for="g in groups" :key="g.key" class="metrics-servers">
+              <button class="toolbar-label group-toggle" :title="'show only ' + g.label.toLowerCase()" @click="selectOnly(g.names)">
+                <v-icon x-small>{{ g.icon }}</v-icon> {{ g.label }}
+              </button>
+              <v-chip
+                v-for="name in g.names"
+                :key="name"
+                small
+                :outlined="!selected.includes(name)"
+                :style="chipStyle(name)"
+                @click="toggleServer(name)"
+              >
+                <v-icon x-small left>{{ g.icon }}</v-icon>{{ name }}
+              </v-chip>
+            </div>
           </div>
           <div class="metrics-range">
             <v-btn-toggle v-model="range" mandatory dense @change="loadMetrics">
@@ -32,10 +36,14 @@
         </div>
 
         <template v-else>
-          <div class="metrics-summary">
-            <v-card v-for="row in summary" :key="row.server" class="summary-card" outlined>
+          <template v-for="g in groups">
+          <div v-if="summary.some((row) => g.names.includes(row.server))" :key="g.key + '-label'" class="summary-label">
+            <v-icon small>{{ g.icon }}</v-icon> {{ g.label }}
+          </div>
+          <div v-if="summary.some((row) => g.names.includes(row.server))" :key="g.key + '-cards'" class="metrics-summary">
+            <v-card v-for="row in summary.filter((x) => g.names.includes(x.server))" :key="row.server" class="summary-card" outlined>
               <div class="summary-title" :style="{ color: color(row.server) }">
-                <v-icon small :color="color(row.server)">mdi-server-network</v-icon>
+                <v-icon small :color="color(row.server)">{{ g.icon }}</v-icon>
                 {{ row.server }}
                 <span class="summary-age">{{ row.age }}</span>
               </div>
@@ -49,6 +57,7 @@
               </div>
             </v-card>
           </div>
+          </template>
 
           <div class="metrics-grid">
             <MetricsChart title="CPU usage" :datasets="cpuDatasets" :format-y="percent" :y-max="100" :from="from" :to="to" />
@@ -116,6 +125,7 @@ export default {
       step: 60,
       results: {},
       gpus: [],
+      xatuServers: [],
       gpuResults: {},
       loading: false,
     }
@@ -129,6 +139,16 @@ export default {
     clearInterval(this.refreshInterval)
   },
   computed: {
+    // servers run the full Xatu (heartbeat in /status); the others are workers (agents, gpu miners).
+    // Without /status (older backend) a machine with gpus counts as a worker.
+    groups() {
+      const names = this.servers.map((s) => s.server)
+      const isServer = (n) => (this.xatuServers.length ? this.xatuServers.includes(n) : !this.gpus.some((g) => g.server === n))
+      return [
+        { key: 'servers', label: 'Servers', icon: 'mdi-server-network', names: names.filter(isServer) },
+        { key: 'workers', label: 'Workers', icon: 'mdi-expansion-card', names: names.filter((n) => !isServer(n)) },
+      ].filter((g) => g.names.length)
+    },
     selectedResults() {
       return this.selected.filter((s) => this.results[s]).map((s) => this.results[s])
     },
@@ -213,6 +233,10 @@ export default {
         ? { backgroundColor: this.color(server, 0.12), color: this.color(server), borderColor: this.color(server) }
         : { color: '#777' }
     },
+    selectOnly(names) {
+      this.selected = [...names]
+      this.loadMetrics()
+    },
     toggleServer(server) {
       this.selected = this.selected.includes(server) ? this.selected.filter((s) => s !== server) : [...this.selected, server]
       this.loadMetrics()
@@ -290,11 +314,16 @@ export default {
     },
     reload() {
       this.loading = true
-      Promise.all([client.get('/metrics/servers'), client.get('/metrics/gpus')])
-        .then(([servers, gpus]) => {
+      Promise.all([
+        client.get('/metrics/servers'),
+        client.get('/metrics/gpus').catch(() => ({ data: { hits: [] } })),
+        client.get('/status').catch(() => ({ data: {} })),
+      ])
+        .then(([servers, gpus, status]) => {
           const first = !this.servers.length
           this.servers = servers.data.hits
           this.gpus = gpus.data.hits
+          this.xatuServers = (status.data.servers || []).map((x) => x.server)
           const names = this.servers.map((s) => s.server)
           this.selected = first ? names : this.selected.filter((s) => names.includes(s))
           return this.loadMetrics()
@@ -344,6 +373,40 @@ export default {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.metrics-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 78px;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px !important;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.summary-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #33563f;
+  margin: 2px 0 6px;
 }
 
 .metrics-servers {
