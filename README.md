@@ -137,12 +137,18 @@ WantedBy=multi-user.target
 
 Xatu can run on several servers sharing the same mysql (e.g. galera), redis and elasticsearch. Each instance must have a different `SERVER`.
 
-- Each Xatu checks only what is on its own server: services with `systemctl` (a stopped service whose unit is disabled, masked or missing on the server is not reported), containers that exist in its docker, and the APIs (every server checks every API).
-- The result of each server is saved in redis, never in mysql, so the servers do not overwrite each other. The pages show the status of each server and an aggregated one: a service or container fails if it fails on any server; an API fails only when most servers fail it (a single failing server is a network problem of that server).
+- Each Xatu checks only what is on its own server: services with `systemctl` (a stopped service whose unit is disabled, masked or missing on the server is not reported), containers that exist in its docker, the APIs (every server checks every API) and the scripts (every server runs every script).
+- The result of each server is saved in redis, never in mysql, so the servers do not overwrite each other. The pages show the status of each server and an aggregated one: a service or container fails if it fails on any server; an API fails only when most servers fail it (a single failing server is a network problem of that server); a script fails if it fails on any server.
 - Only one Xatu, the leader, sends telegram notifications. The leadership is a lock in redis; if the leader stops, another Xatu takes it in up to 30 seconds. Alerts say which server has the problem, are repeated every `TELEGRAM_REPEAT_MINUTES` while it lasts and a "Resolved" message is sent when it is gone.
 - A Xatu that stops sending heartbeats is alerted as "stopped reporting". When a server is decommissioned, remove it with `DELETE /api/servers/<SERVER>` (only after stopping its Xatu).
 
 Redis keys (always `::` separated): `xatu::status::<kind>::<id>::<server>`, `xatu::server::<server>`, `xatu::servers::known`, `xatu::leader`, `xatu::alert::<key>` and `xatu::token::<token>` (login).
+
+## Scripts
+
+Bash scripts registered in the "Scripts" page (table `tb_scripts`, created by `createTables`) run on every server where the managers are enabled, once every `interval_seconds` (at least 10), with `bash -c` as the user of the Xatu service and stdin from `/dev/null`. A run fails when it exits with a code other than 0 or lasts more than `timeout_seconds` (it is killed with its children); the status shows the exit code and the last lines printed, and the failure is alerted on telegram like a stopped service ("Script X failed on SERVER (exit 1: ...)"). The scripts get `XATU_SERVER` and `XATU_SCRIPT_NAME` in the environment. Runs of the same script never overlap.
+
+Scripts can be created, edited and removed only with a login session, never with an api token (even a full one), because they run on every server.
 
 ## To package in an unique jar with all dependencies
 ```bash

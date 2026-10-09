@@ -1,6 +1,6 @@
 # API do Xatu Observer
 
-API HTTP/JSON do Xatu: uso de CPU, memória, rede e disco dos containers Docker e dos servidores, status de services, APIs e containers, e logs.
+API HTTP/JSON do Xatu: uso de CPU, memória, rede e disco dos containers Docker e dos servidores, status de services, APIs, containers e scripts, e logs.
 
 - **Base:** `https://xatu.santanabigdata.com.br/api`
 - **Formato:** JSON, campos em `snake_case`. Datas são **epoch em milissegundos** (UTC).
@@ -17,7 +17,7 @@ API HTTP/JSON do Xatu: uso de CPU, memória, rede e disco dos containers Docker 
    - [Campos de uma amostra](#campos-de-uma-amostra)
    - [Receitas](#receitas)
 3. [Servidores](#servidores)
-4. [Status de services, APIs e containers](#status-de-services-apis-e-containers)
+4. [Status de services, APIs, containers e scripts](#status-de-services-apis-containers-e-scripts)
 5. [Logs](#logs)
 6. [Tokens](#tokens)
 7. [Limites e detalhes](#limites-e-detalhes)
@@ -37,7 +37,7 @@ curl -H "Authorization: Bearer xatu_SEU_TOKEN" https://xatu.santanabigdata.com.b
 | Tipo | Pode |
 |---|---|
 | **Somente leitura** (padrão) | Só `GET`. É o indicado para integrações que consultam dados. |
-| **Completo** | Todos os métodos: cadastrar e remover services, APIs e containers monitorados. |
+| **Completo** | Todos os métodos: cadastrar e remover services, APIs e containers monitorados. Scripts só podem ser alterados com login na interface. |
 
 - **Revogação:** um token revogado deixa de funcionar em até 60 segundos em todos os servidores.
 - **Gerenciar tokens:** criar, listar e revogar tokens só é possível com login na interface, nunca com outro token.
@@ -230,7 +230,7 @@ done
 
 ---
 
-## Status de services, APIs e containers
+## Status de services, APIs, containers e scripts
 
 Cada servidor verifica o que roda nele e o resultado vem **por servidor**, junto com um status geral.
 
@@ -239,13 +239,20 @@ Cada servidor verifica o que roda nele e o resultado vem **por servidor**, junto
 | `GET /services?limit=100&offset=0` | Services do systemd. |
 | `GET /apis?limit=100&offset=0` | APIs monitoradas (healthcheck HTTP). |
 | `GET /containers?limit=100&offset=0` | Containers monitorados. |
+| `GET /scripts?limit=100&offset=0` | Scripts bash rodados em todos os servidores (traz também `script`, `interval_seconds` e `timeout_seconds`). |
 | `GET /status` | Este servidor, o líder (quem envia os alertas) e os servidores do Xatu (`alive`, `last_seen`). |
 | `GET /healthcheck` | Saúde do próprio Xatu (Redis, MySQL, Docker, Elasticsearch, Cassandra). **Não exige token.** |
 
 `limit` e `offset` são obrigatórios nas listas. Cada item traz:
 
-- **`status` geral:** `W` (funcionando), `F` (falhando) ou `U` (nenhum servidor verificou). Um service ou container falha se falhar em qualquer servidor; uma API só falha se falhar na **maioria** dos servidores.
+- **`status` geral:** `W` (funcionando), `F` (falhando) ou `U` (nenhum servidor verificou). Um service, container ou script falha se falhar em qualquer servidor; uma API só falha se falhar na **maioria** dos servidores.
 - **`servers`:** a verificação de cada servidor, com `server`, `status`, `message` (motivo da falha) e `checked_at`.
+
+### Scripts
+
+Cada script roda com `bash` em todos os servidores, uma vez a cada `interval_seconds` (mínimo 10), como o usuário do serviço do Xatu. Ele falha se sair com código diferente de 0 ou passar de `timeout_seconds` (não pode ser maior que o intervalo); a `message` traz o código de saída e as últimas linhas impressas, por exemplo `exit 1: no backup in the last 25h` ou `timed out after 60s`. As variáveis `XATU_SERVER` e `XATU_SCRIPT_NAME` estão disponíveis no script.
+
+Criar, editar e remover scripts (`POST /script`, `PUT /script/<id>`, `DELETE /script/<id>`) só funciona com login na interface. Com token, mesmo completo, a resposta é `403`, porque um script roda comandos em todos os servidores.
 
 ---
 
