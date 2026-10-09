@@ -4,7 +4,6 @@ import com.danielsanrocha.xatu.UnitSpec
 import com.danielsanrocha.xatu.commons.CassandraMigrator.Migration
 
 import scala.concurrent.Future
-import scala.io.Source
 
 class CassandraMigratorSpec extends UnitSpec {
   describe("parseMigrations") {
@@ -13,6 +12,14 @@ class CassandraMigratorSpec extends UnitSpec {
         CassandraMigrator.parseMigrations(Seq("V010__later.cql", "README.md", "V002__second.cql", "V001__first.cql")) should equal(
           Seq(Migration(1, "first", "V001__first.cql"), Migration(2, "second", "V002__second.cql"), Migration(10, "later", "V010__later.cql"))
         )
+      }
+    }
+  }
+
+  describe("read") {
+    it("should read the migrations as utf-8, whatever the default charset") {
+      Future {
+        CassandraMigrator.read("V004__hardware_sensors.cql") should include("°C")
       }
     }
   }
@@ -46,7 +53,7 @@ class CassandraMigratorSpec extends UnitSpec {
   describe("V001__metrics.cql") {
     it("should render into the keyspace, tables and 7 days ttl") {
       Future {
-        val cql = Source.fromResource("cassandra/V001__metrics.cql").mkString
+        val cql = CassandraMigrator.read("V001__metrics.cql")
         val statements = CassandraMigrator.statements(CassandraMigrator.render(cql, Map("keyspace" -> "xatu", "replication_factor" -> "3")))
 
         statements.map(_.linesIterator.next()) should equal(

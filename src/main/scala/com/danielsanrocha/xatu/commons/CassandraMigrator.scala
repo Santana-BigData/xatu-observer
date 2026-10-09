@@ -6,7 +6,7 @@ import com.typesafe.scalalogging.Logger
 
 import java.nio.file.{FileSystemNotFoundException, FileSystems, Files, Path, Paths}
 import java.time.Instant
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.jdk.CollectionConverters._
 import scala.util.Using
 
@@ -60,8 +60,9 @@ object CassandraMigrator {
     Using.resource(Files.list(dir))(_.iterator().asScala.map(_.getFileName.toString).toList)
   }
 
-  private def read(file: String): String =
-    Using.resource(Source.fromResource(s"$resourceDir/$file"))(_.mkString)
+  // always utf-8: the default charset of the servers is not, and the files have "°C" in comments
+  private[commons] def read(file: String): String =
+    Using.resource(Source.fromResource(s"$resourceDir/$file")(Codec.UTF8))(_.mkString)
 
   private def appliedVersions(session: CqlSession, keyspace: String): Set[Int] = {
     val tableExists = session
