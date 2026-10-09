@@ -28,6 +28,9 @@
               <v-icon>mdi-docker</v-icon>&nbsp;<a href="/containers">Containers</a>
             </v-list-item>
             <v-list-item>
+              <v-icon>mdi-script-text-outline</v-icon>&nbsp;<a href="/scripts">Scripts</a>
+            </v-list-item>
+            <v-list-item>
               <v-icon>mdi-math-log</v-icon>&nbsp;<a href="/logs">Logs</a>
             </v-list-item>
             <v-list-item>
