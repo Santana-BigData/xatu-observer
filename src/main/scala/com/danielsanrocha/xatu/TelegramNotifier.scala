@@ -3,6 +3,7 @@ package com.danielsanrocha.xatu
 import com.danielsanrocha.xatu.commons.StatusRules
 import com.danielsanrocha.xatu.commons.StatusRules.Target
 import com.danielsanrocha.xatu.models.internals.{CheckKind, SentAlert}
+import com.danielsanrocha.xatu.services.AlertRuleService
 import com.danielsanrocha.xatu.repositories.{APIRepository, ContainerRepository, MetricsRepository, ScriptRepository, ServiceRepository, StatusRepository}
 import com.typesafe.scalalogging.Logger
 import scalaj.http.{Http, HttpOptions}
@@ -25,6 +26,7 @@ class TelegramNotifier(
     containerRepository: ContainerRepository,
     scriptRepository: ScriptRepository,
     metricsRepository: MetricsRepository,
+    alertRules: AlertRuleService,
     repeatMinutes: Long,
     agentStaleMinutes: Long,
     confirmRounds: Int
@@ -55,8 +57,12 @@ class TelegramNotifier(
       val now = System.currentTimeMillis()
       val xatuServers = statusRepository.servers()
       val agents = Await.result(metricsRepository.servers(), 30.seconds)
+      // rules over the metrics (temperature, fans...): cassandra down must not stop the other alerts
+      val ruleProblems =
+        try Await.result(alertRules.problems(now), 30.seconds)
+        catch { case e: Exception => logging.error(s"Could not evaluate the alert rules: ${e.getMessage}"); Seq() }
       val problems = StatusRules.problems(targets(), checks, xatuServers) ++
-        StatusRules.staleAgents(agents, xatuServers, now, agentStaleMinutes * 60 * 1000)
+        StatusRules.staleAgents(agents, xatuServers, now, agentStaleMinutes * 60 * 1000) ++ ruleProblems
       rounds = (rounds :+ problems.map(_.key).toSet).takeRight(confirmRounds)
       val confirmed = StatusRules.confirmedKeys(rounds, confirmRounds)
       val plan = StatusRules.plan(problems, statusRepository.sentAlerts(), now, repeatMinutes * 60 * 1000, confirmed)

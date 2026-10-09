@@ -1,7 +1,7 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.{ContainerStatsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
-import com.danielsanrocha.xatu.controllers.{ContainerMetricsController, GpuMetricsController, MetricsController, StatusController}
+import com.danielsanrocha.xatu.commons.{AlertMetricSeries, ContainerStatsReader, HardwareSensorsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
+import com.danielsanrocha.xatu.controllers.{AlertRuleController, ContainerMetricsController, GpuMetricsController, MetricsController, SensorsController, StatusController}
 import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ScriptObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
   APIRepository,
@@ -20,6 +20,10 @@ import com.danielsanrocha.xatu.repositories.{
   MetricsRepositoryDummyImpl,
   MetricsRepositoryImpl,
   CassandraSession,
+  AlertRuleRepositoryImpl,
+  SensorsRepository,
+  SensorsRepositoryDummyImpl,
+  SensorsRepositoryImpl,
   ScriptRepository,
   ScriptRepositoryImpl,
   ServiceRepository,
@@ -38,6 +42,7 @@ import com.danielsanrocha.xatu.services.{
   LogServiceImpl,
   ScriptService,
   ScriptServiceImpl,
+  AlertRuleService,
   ServiceService,
   ServiceServiceImpl
 }
@@ -86,6 +91,8 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
     if (cassandraActive) new ContainerMetricsRepositoryImpl(cassandraSession) else new ContainerMetricsRepositoryDummyImpl()
   implicit val gpuMetricsRepository: GpuMetricsRepository =
     if (cassandraActive) new GpuMetricsRepositoryImpl(cassandraSession) else new GpuMetricsRepositoryDummyImpl()
+  implicit val sensorsRepository: SensorsRepository =
+    if (cassandraActive) new SensorsRepositoryImpl(cassandraSession) else new SensorsRepositoryDummyImpl()
 
   logging.info("Instantiating docker client...")
   implicit val dockerClient: DockerClient = DockerClientBuilder.getInstance.build
@@ -111,6 +118,12 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   private val token = conf.getString("telegram.bot_token")
   val metricsInterval: Int = conf.getInt("metrics.interval_seconds")
 
+  val alertRuleService = new AlertRuleService(
+    new AlertRuleRepositoryImpl(),
+    new AlertMetricSeries(metricsRepository, gpuMetricsRepository, sensorsRepository),
+    metricsInterval
+  )
+
   def start(): Unit = {
     logging.info(s"Starting as server $server...")
     new ServerHeartbeat(server, statusRepository, clusterPeriod).start()
@@ -128,6 +141,7 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
         containerRepository,
         scriptRepository,
         metricsRepository,
+        alertRuleService,
         conf.getLong("telegram.repeat_minutes"),
         conf.getLong("telegram.agent_stale_minutes"),
         conf.getInt("telegram.confirm_rounds")
@@ -147,6 +161,10 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
       val nvidia = new NvidiaSmiReader(server, conf.getString("metrics.nvidia_smi"))
       if (nvidia.available) new GpuMetricsCollector(nvidia, gpuMetricsRepository, metricsInterval).start()
       else logging.info("No NVIDIA GPU found (nvidia-smi), gpu metrics are not collected.")
+
+      val sensors = new HardwareSensorsReader(server, conf.getString("metrics.ipmi_command"))
+      if (!sensors.ipmiAvailable) logging.info("ipmi is not available, fans and ambient temperature are not collected (cpu temperatures are).")
+      new SensorsCollector(sensors, sensorsRepository, metricsInterval).start()
 
       ContainerStatsReader.dockerUrl(sys.env.get("DOCKER_HOST")) match {
         case Some(url) =>
@@ -173,4 +191,6 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   val metricsController = new MetricsController(metricsInterval)
   val containerMetricsController = new ContainerMetricsController(metricsInterval)
   val gpuMetricsController = new GpuMetricsController(metricsInterval)
+  val sensorsController = new SensorsController(metricsInterval)
+  val alertRuleController = new AlertRuleController(alertRuleService, metricsInterval)
 }

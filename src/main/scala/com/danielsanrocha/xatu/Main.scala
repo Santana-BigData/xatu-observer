@@ -7,8 +7,8 @@ import scala.io.Source
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import com.danielsanrocha.xatu.commons.{CassandraMigrator, ContainerStatsReader, NvidiaSmiReader, Security, SystemMetricsReader}
-import com.danielsanrocha.xatu.repositories.{CassandraSession, ContainerMetricsRepositoryImpl, GpuMetricsRepositoryImpl, LogRepository, LogRepositoryDummyImpl, LogRepositoryImpl, MetricsRepositoryImpl}
+import com.danielsanrocha.xatu.commons.{CassandraMigrator, ContainerStatsReader, HardwareSensorsReader, NvidiaSmiReader, Security, SystemMetricsReader}
+import com.danielsanrocha.xatu.repositories.{CassandraSession, ContainerMetricsRepositoryImpl, GpuMetricsRepositoryImpl, LogRepository, LogRepositoryDummyImpl, LogRepositoryImpl, MetricsRepositoryImpl, SensorsRepositoryImpl}
 import com.typesafe.config.{Config, ConfigFactory}
 
 import java.util.Scanner
@@ -85,6 +85,10 @@ object Main extends App {
     if (nvidia.available) new GpuMetricsCollector(nvidia, new GpuMetricsRepositoryImpl(cassandra), interval).start()
     else logging.info("No NVIDIA GPU found (nvidia-smi), gpu metrics are not collected.")
 
+    val sensors = new HardwareSensorsReader(server, conf.getString("metrics.ipmi_command"))
+    if (!sensors.ipmiAvailable) logging.info("ipmi is not available, fans and ambient temperature are not collected (cpu temperatures are).")
+    new SensorsCollector(sensors, new SensorsRepositoryImpl(cassandra), interval).start()
+
     ContainerStatsReader.dockerUrl(sys.env.get("DOCKER_HOST")) match {
       case Some(url) => new ContainerMetricsCollector(new ContainerStatsReader(server, url), new ContainerMetricsRepositoryImpl(cassandra), interval).start()
       case None      => logging.info("DOCKER_HOST is not a tcp address, docker container metrics are not collected.")
@@ -137,6 +141,10 @@ object Main extends App {
         logging.info("Creating tb_scripts table...")
         val scriptsQuery = Source.fromResource("queries/CreateScriptsTable.sql").mkString
         Await.result(client.run(sqlu"#$scriptsQuery"), atMost = 10 second)
+
+        logging.info("Creating tb_alert_rules table...")
+        val alertRulesQuery = Source.fromResource("queries/CreateAlertRulesTable.sql").mkString
+        Await.result(client.run(sqlu"#$alertRulesQuery"), atMost = 10 second)
         logging.info("Created!\n")
 
       case "createIndex" =>
