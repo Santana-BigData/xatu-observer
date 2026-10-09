@@ -17,10 +17,12 @@ API HTTP/JSON do Xatu: uso de CPU, memória, rede e disco dos containers Docker 
    - [Campos de uma amostra](#campos-de-uma-amostra)
    - [Receitas](#receitas)
 3. [Servidores](#servidores)
-4. [Status de services, APIs, containers e scripts](#status-de-services-apis-containers-e-scripts)
-5. [Logs](#logs)
-6. [Tokens](#tokens)
-7. [Limites e detalhes](#limites-e-detalhes)
+4. [Temperaturas e ventoinhas](#temperaturas-e-ventoinhas)
+5. [Regras de alerta](#regras-de-alerta)
+6. [Status de services, APIs, containers e scripts](#status-de-services-apis-containers-e-scripts)
+7. [Logs](#logs)
+8. [Tokens](#tokens)
+9. [Limites e detalhes](#limites-e-detalhes)
 
 ---
 
@@ -227,6 +229,37 @@ for s in wl3-worker-6 wl3-worker-7 wl3-worker-8; do
     | jq -r --arg s "$s" '[.hits[]] | max_by(.temperature_c) | "\($s) gpu\(.gpu_index) \(.name): \(.temperature_c)°C, \(.utilization_gpu_percent)% busy, \(.processes | map(.name | split("/") | last) | join(","))"'
 done
 ```
+
+---
+
+## Temperaturas e ventoinhas
+
+`GET /metrics/sensors?server=<servidor>&from=<ms>&to=<ms>&step=<s>` (`from`, `to` e `step` opcionais, como em `/metrics`)
+
+Sensores de hardware de um servidor, um ponto por sensor por `step`:
+
+| Campo | Descrição |
+|---|---|
+| `sensor` | `cpu0 core 3`, `cpu1 package`, `FAN MOD 1A`, `Ambient Temp`... |
+| `kind` | `cpu_temp` (cada core e pacote, coretemp), `fan` (RPM, ipmi), `ambient_temp` (entrada do ar, ipmi), `board_temp` (outras temperaturas do ipmi) |
+| `min`, `avg`, `max`, `last` | Menor, média, maior e último valor do intervalo (°C ou RPM). |
+| `high`, `crit` | Limites informados pelo processador (coretemp), quando existem. |
+
+As temperaturas dos cores vêm de todos os servidores e mineradores. Ventoinhas e entrada do ar só aparecem onde o `ipmitool` funciona (os servidores Dell).
+
+---
+
+## Regras de alerta
+
+Uma regra alerta no Telegram quando uma métrica de um servidor fica **acima** (ou **abaixo**) de um valor por mais de X minutos. Um pico curto não alerta, e a falta de dados (servidor que parou de mandar) zera a contagem.
+
+| Rota | Descrição |
+|---|---|
+| `GET /alert-rules/metrics` | Métricas disponíveis (`cpu_temp`, `gpu_temp`, `ambient_temp`, `fan_rpm`, `cpu_percent`, `mem_percent`, `disk_percent`), com unidade e sugestão de operador e valor. |
+| `GET /alert-rules` | Regras com o estado agora em cada servidor (`current`, `in_condition_since`, `worst`, `firing`). |
+| `POST /alert-rule` | Cria: `{"name": "cpu quente", "metric": "cpu_temp", "server": "", "operator": "above", "threshold": 80, "duration_minutes": 5, "enabled": true}`. `server` vazio = todos. |
+| `PUT /alert-rule/<id>` / `DELETE /alert-rule/<id>` | Edita / remove. |
+| `POST /alert-rules/preview` | Mesmo corpo do `POST`, sem salvar: estado agora e quantas vezes a regra teria alertado nas últimas 24h em cada servidor. |
 
 ---
 

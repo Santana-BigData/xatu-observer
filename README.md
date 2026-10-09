@@ -144,6 +144,16 @@ Xatu can run on several servers sharing the same mysql (e.g. galera), redis and 
 
 Redis keys (always `::` separated): `xatu::status::<kind>::<id>::<server>`, `xatu::server::<server>`, `xatu::servers::known`, `xatu::leader`, `xatu::alert::<key>` and `xatu::token::<token>` (login).
 
+## Temperatures, fans and alert rules
+
+Every Xatu (and the agent on the miners) saves, every minute, the temperature of each cpu core and package (coretemp in `/sys/class/hwmon`) in cassandra (`sensors_by_server`, migration V004). Where ipmi works it also saves the speed of each fan and the air inlet temperature, from `ipmitool sdr elist full`. The ipmi device is only readable by root, so the default `METRICS_IPMI_COMMAND` is `sudo -n /usr/bin/ipmitool sdr elist full`, with this sudoers rule (`/etc/sudoers.d/xatu-ipmi`):
+
+```
+xatu ALL=(root) NOPASSWD: /usr/bin/ipmitool sdr elist full
+```
+
+Without ipmitool or the rule, only the cpu temperatures are collected. The "Metrics" page shows them, and the "Alerts" page has rules like "CPU temperature above 80°C for more than 5 minutes" (also gpu temperature, inlet air, slowest fan, cpu, memory and disk usage), on one or all servers, with a preview of what the rule would have alerted in the last 24 hours. The leader evaluates the rules every minute and sends them to telegram like the other alerts (table `tb_alert_rules`, created by `createTables`).
+
 ## Scripts
 
 Bash scripts registered in the "Scripts" page (table `tb_scripts`, created by `createTables`) run on every server where the managers are enabled, once every `interval_seconds` (at least 10), with `bash -c` as the user of the Xatu service and stdin from `/dev/null`. A run fails when it exits with a code other than 0 or lasts more than `timeout_seconds` (it is killed with its children); the status shows the exit code and the last lines printed, and the failure is alerted on telegram like a stopped service ("Script X failed on SERVER (exit 1: ...)"). The scripts get `XATU_SERVER` and `XATU_SCRIPT_NAME` in the environment. Runs of the same script never overlap.
@@ -248,6 +258,7 @@ LOG_LEVEL=trace make test-integration-docker
 - METRICS_NET_INTERFACES: Comma separated network interfaces summed in the network chart. Empty (default) = all physical interfaces, which leaves out loopback, docker bridges, veth and vpn tunnels.
 - METRICS_DISK_PATH: Path whose filesystem is used for disk usage (default `/`).
 - NVIDIA_SMI: nvidia-smi binary for GPU metrics (default `nvidia-smi`; skipped when it is missing or reports no GPU).
+- METRICS_IPMI_COMMAND: Command that prints `ipmitool sdr elist full` for fans and inlet air temperature (default `sudo -n /usr/bin/ipmitool sdr elist full`; empty disables it).
 - TELEGRAM_AGENT_STALE_MINUTES: Minutes without metrics before alerting that an agent stopped (default 5).
 - SERVER: Name of this server (hostname when not set). It names the checks of this server, is saved in the `server` field of each log in elasticsearch and names the server metrics. Must be different on each server.
 
