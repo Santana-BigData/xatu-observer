@@ -51,7 +51,7 @@ class AlertRulesSpec extends UnitSpec {
         val st = AlertRules.state("s1", samples, hot, 6 * minute + 10000, minute)
         (st.current, st.inConditionSince, st.worst, st.firing) should equal((Some(84.0), Some(minute), Some(85.0), true))
         AlertRules.message(hot, st, 6 * minute + 10000) should equal(
-          "CPU temperature (hottest core) on s1 above 80°C for 5 min (now 84°C, worst 85°C) - rule 'cpu quente'"
+          "CPU temperature (any core) on s1 above 80°C for 5 min (now 84°C, worst 85°C) - rule 'cpu quente'"
         )
       }
     }

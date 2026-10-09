@@ -49,14 +49,14 @@ object AlertOperator {
   val Below = "below"
 }
 
-/** A metric rules can watch. One value per server per sample, e.g. the hottest core. */
+/** A metric rules can watch. With many sensors (cores, gpus, fans) any of them passing the value counts. */
 case class AlertMetric(key: String, label: String, unit: String, defaultOperator: String, defaultThreshold: Double)
 
 object AlertMetric {
-  val CpuTemp: AlertMetric = AlertMetric("cpu_temp", "CPU temperature (hottest core)", "°C", AlertOperator.Above, 80)
-  val GpuTemp: AlertMetric = AlertMetric("gpu_temp", "GPU temperature (hottest GPU)", "°C", AlertOperator.Above, 80)
-  val AmbientTemp: AlertMetric = AlertMetric("ambient_temp", "Inlet air temperature (ipmi)", "°C", AlertOperator.Above, 35)
-  val FanRpm: AlertMetric = AlertMetric("fan_rpm", "Fan speed (slowest fan, ipmi)", "RPM", AlertOperator.Below, 1500)
+  val CpuTemp: AlertMetric = AlertMetric("cpu_temp", "CPU temperature (any core)", "°C", AlertOperator.Above, 80)
+  val GpuTemp: AlertMetric = AlertMetric("gpu_temp", "GPU temperature (any GPU)", "°C", AlertOperator.Above, 80)
+  val AmbientTemp: AlertMetric = AlertMetric("ambient_temp", "Inlet air temperature (any inlet sensor, ipmi)", "°C", AlertOperator.Above, 35)
+  val FanRpm: AlertMetric = AlertMetric("fan_rpm", "Fan speed (any fan, ipmi)", "RPM", AlertOperator.Below, 1500)
   val CpuPercent: AlertMetric = AlertMetric("cpu_percent", "CPU usage", "%", AlertOperator.Above, 90)
   val MemPercent: AlertMetric = AlertMetric("mem_percent", "Memory usage", "%", AlertOperator.Above, 90)
   val DiskPercent: AlertMetric = AlertMetric("disk_percent", "Disk usage", "%", AlertOperator.Above, 90)

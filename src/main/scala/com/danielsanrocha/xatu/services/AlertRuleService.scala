@@ -41,7 +41,7 @@ class AlertRuleService(repository: AlertRuleRepository, series: AlertMetricSerie
     series.servers(rule.server, now).flatMap { servers =>
       val from = now - rule.durationMinutes * 60000L - 5 * intervalMillis
       Future.sequence(servers.map { s =>
-        series.series(rule.metric, s, from, now).map(AlertRules.state(s, _, rule, now, intervalMillis))
+        series.series(rule.metric, rule.operator, s, from, now).map(AlertRules.state(s, _, rule, now, intervalMillis))
       })
     }
 
@@ -49,7 +49,7 @@ class AlertRuleService(repository: AlertRuleRepository, series: AlertMetricSerie
   def backtest(rule: AlertRule, now: Long, hours: Int): Future[Seq[Backtest]] =
     series.servers(rule.server, now).flatMap { servers =>
       Future.sequence(servers.map { s =>
-        series.series(rule.metric, s, now - hours * 3600000L, now).map(samples => Backtest(s, AlertRules.episodes(samples, rule, intervalMillis)))
+        series.series(rule.metric, rule.operator, s, now - hours * 3600000L, now).map(samples => Backtest(s, AlertRules.episodes(samples, rule, intervalMillis)))
       })
     }
 

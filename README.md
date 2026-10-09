@@ -152,7 +152,7 @@ Every Xatu (and the agent on the miners) saves, every minute, the temperature of
 xatu ALL=(root) NOPASSWD: /usr/bin/ipmitool sdr elist full
 ```
 
-Without ipmitool or the rule, only the cpu temperatures are collected. The "Metrics" page shows them, and the "Alerts" page has rules like "CPU temperature above 80°C for more than 5 minutes" (also gpu temperature, inlet air, slowest fan, cpu, memory and disk usage), on one or all servers, with a preview of what the rule would have alerted in the last 24 hours. The leader evaluates the rules every minute and sends them to telegram like the other alerts (table `tb_alert_rules`, created by `createTables`).
+Without ipmitool or the rule, only the cpu temperatures are collected. The "Metrics" page shows them, and the "Alerts" page has rules like "CPU temperature above 80°C for more than 5 minutes" (also gpu temperature, inlet air, fan speed, cpu, memory and disk usage), on one or all servers. With many sensors (cores, gpus, fans) any of them passing the value counts, even a different one each minute, with a preview of what the rule would have alerted in the last 24 hours. The leader evaluates the rules every minute and sends them to telegram like the other alerts (table `tb_alert_rules`, created by `createTables`).
 
 ## Scripts
 

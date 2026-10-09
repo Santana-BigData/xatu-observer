@@ -251,7 +251,7 @@ As temperaturas dos cores vêm de todos os servidores e mineradores. Ventoinhas 
 
 ## Regras de alerta
 
-Uma regra alerta no Telegram quando uma métrica de um servidor fica **acima** (ou **abaixo**) de um valor por mais de X minutos. Um pico curto não alerta, e a falta de dados (servidor que parou de mandar) zera a contagem.
+Uma regra alerta no Telegram quando uma métrica de um servidor fica **acima** (ou **abaixo**) de um valor por mais de X minutos. Com vários sensores (cores, GPUs, ventoinhas), basta **qualquer um** passar do valor, mesmo que seja um diferente a cada minuto. Um pico curto não alerta, e a falta de dados (servidor que parou de mandar) zera a contagem.
 
 | Rota | Descrição |
 |---|---|
