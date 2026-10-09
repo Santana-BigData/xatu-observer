@@ -40,6 +40,9 @@
               <v-icon>mdi-chart-box-outline</v-icon>&nbsp;<a href="/docker">Docker usage</a>
             </v-list-item>
             <v-list-item>
+              <v-icon>mdi-bell-alert-outline</v-icon>&nbsp;<a href="/alerts">Alerts</a>
+            </v-list-item>
+            <v-list-item>
               <v-icon>mdi-key-variant</v-icon>&nbsp;<a href="/tokens">Tokens</a>
             </v-list-item>
             <v-list-item>

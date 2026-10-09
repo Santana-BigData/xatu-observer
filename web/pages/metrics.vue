@@ -53,6 +53,8 @@
                 <div><span>disk</span><strong>{{ row.disk }}</strong><small>{{ row.diskBytes }}</small></div>
                 <div><span>network</span><strong>↓ {{ row.rx }}</strong><small>↑ {{ row.tx }}</small></div>
                 <div><span>load</span><strong>{{ row.load }}</strong><small>1m / 5m / 15m</small></div>
+                <div v-if="row.cpuTemp" :class="{ hot: row.cpuHot }"><span>cpu temp</span><strong>{{ row.cpuTemp }}</strong><small>{{ row.cpuTempDetail }}</small></div>
+                <div v-if="row.fan"><span>fans</span><strong>{{ row.fan }}</strong><small>{{ row.fanDetail }}</small></div>
                 <div v-if="row.gpus"><span>gpu</span><strong>{{ row.gpuUtil }}</strong><small>{{ row.gpus }}× {{ row.gpuName }} · {{ row.gpuTemp }}</small></div>
               </div>
             </v-card>
@@ -94,6 +96,54 @@
               throttling in this period: {{ throttled.join(' · ') }}
             </div>
           </template>
+          <template v-if="sensorServers.length">
+            <h3 class="metrics-section">
+              Temperatures &amp; fans
+              <small v-if="selected.length > 1">select only one server to see each core and fan</small>
+            </h3>
+            <div class="metrics-grid">
+              <MetricsChart
+                title="CPU temperature (solid: hottest core, dashed: coolest core)"
+                :datasets="[...sensorSeries('cpu_temp', (ps) => Math.max(...ps.map((p) => p.max))), ...sensorSeries('cpu_temp', (ps) => Math.min(...ps.map((p) => p.min)), ' coolest', true)]"
+                :format-y="celsius"
+                :from="from"
+                :to="to"
+              />
+              <MetricsChart
+                v-if="hasSensor('fan')"
+                title="Fans (solid: slowest fan, dashed: fastest)"
+                :datasets="[...sensorSeries('fan', (ps) => Math.min(...ps.map((p) => p.min))), ...sensorSeries('fan', (ps) => Math.max(...ps.map((p) => p.max)), ' fastest', true)]"
+                :format-y="rpm"
+                :from="from"
+                :to="to"
+              />
+              <MetricsChart
+                v-if="hasSensor('ambient_temp')"
+                title="Inlet air temperature (ipmi)"
+                :datasets="sensorSeries('ambient_temp', (ps) => Math.max(...ps.map((p) => p.max)))"
+                :format-y="celsius"
+                :from="from"
+                :to="to"
+              />
+              <template v-if="selected.length === 1">
+                <MetricsChart
+                  :title="'Each core of ' + selected[0] + (coreLimit ? ' (dashed: limit ' + coreLimit + '°C)' : '')"
+                  :datasets="perSensor('cpu_temp', coreLimit)"
+                  :format-y="celsius"
+                  :from="from"
+                  :to="to"
+                />
+                <MetricsChart
+                  v-if="hasSensor('fan')"
+                  :title="'Each fan of ' + selected[0]"
+                  :datasets="perSensor('fan')"
+                  :format-y="rpm"
+                  :from="from"
+                  :to="to"
+                />
+              </template>
+            </div>
+          </template>
           <div class="metrics-footer">
             one point every {{ stepLabel }} · data kept for 7 days · refreshes every minute
           </div>
@@ -127,6 +177,7 @@ export default {
       gpus: [],
       xatuServers: [],
       gpuResults: {},
+      sensorResults: {},
       loading: false,
     }
   },
@@ -192,6 +243,15 @@ export default {
         return reasons.size ? [`${this.gpuLabel(server, gpu)}: ${[...reasons].join(', ')}`] : []
       })
     },
+    // selected servers with sensor readings
+    sensorServers() {
+      return this.selected.filter((s) => (this.sensorResults[s] || []).length)
+    },
+    // limit reported by coretemp ("max") of the single selected server
+    coreLimit() {
+      const points = (this.sensorResults[this.selected[0]] || []).filter((p) => p.kind === 'cpu_temp' && p.high)
+      return points.length ? Math.round(points[points.length - 1].high) : null
+    },
     stepLabel() {
       return this.step >= 3600 ? `${this.step / 3600}h` : this.step >= 60 ? `${this.step / 60} min` : `${this.step}s`
     },
@@ -202,6 +262,7 @@ export default {
           const p = r.points[r.points.length - 1]
           const info = this.servers.find((s) => s.server === r.server)
           const gpuPoints = this.gpuResults[r.server] || []
+          const sensors = this.sensorSummary(r.server)
           const lastAt = Math.max(0, ...gpuPoints.map((g) => g.collected_at))
           const lastGpus = gpuPoints.filter((g) => g.collected_at === lastAt)
           return {
@@ -209,6 +270,7 @@ export default {
             gpuName: lastGpus.length ? lastGpus[0].name.replace(/^NVIDIA /, '') : '',
             gpuUtil: lastGpus.length ? this.percent(Math.max(...lastGpus.map((g) => g.utilization_gpu_percent))) : '',
             gpuTemp: lastGpus.length ? `${Math.max(...lastGpus.map((g) => g.temperature_c))}°C` : '',
+            ...sensors,
             server: r.server,
             age: `updated ${this.timeSince(info ? info.last_seen : p.collected_at)}`,
             cpu: this.percent(p.cpu_percent),
@@ -256,6 +318,84 @@ export default {
     },
     percent(v) {
       return v === null || v === undefined || isNaN(v) ? '-' : `${Number(v).toFixed(v < 10 ? 1 : 0)}%`
+    },
+    rpm(v) {
+      return v === null || v === undefined ? '-' : `${Math.round(v)} RPM`
+    },
+    hasSensor(kind) {
+      return this.sensorServers.some((s) => this.sensorResults[s].some((p) => p.kind === kind))
+    },
+    // sensor points of a kind of a server, grouped by time: [[at, points]]
+    sensorBuckets(server, kind) {
+      const byTime = new Map()
+      for (const p of this.sensorResults[server] || []) {
+        if (p.kind !== kind) continue
+        if (!byTime.has(p.collected_at)) byTime.set(p.collected_at, [])
+        byTime.get(p.collected_at).push(p)
+      }
+      return [...byTime.entries()].sort((a, b) => a[0] - b[0])
+    },
+    withGaps(points) {
+      const data = []
+      let last = null
+      for (const [x, y] of points) {
+        if (last !== null && x - last > 2 * this.step * 1000) data.push({ x: last + this.step * 1000, y: null })
+        data.push({ x, y })
+        last = x
+      }
+      return data
+    },
+    // one line per server, `pick` makes one value of the sensors of the bucket (e.g. the hottest core)
+    sensorSeries(kind, pick, suffix = '', dashed = false) {
+      return this.sensorServers
+        .map((server) => ({ server, buckets: this.sensorBuckets(server, kind) }))
+        .filter((x) => x.buckets.length)
+        .map(({ server, buckets }) => ({
+          label: server + suffix,
+          color: this.color(server, dashed ? 0.6 : 1),
+          dashed,
+          data: this.withGaps(buckets.map(([at, ps]) => [at, pick(ps)])),
+        }))
+    },
+    // one line per sensor of the single selected server, plus the limit
+    perSensor(kind, limit = null) {
+      const server = this.selected[0]
+      const points = (this.sensorResults[server] || []).filter((p) => p.kind === kind)
+      const names = [...new Set(points.map((p) => p.sensor))]
+      const lines = names.map((name, i) => ({
+        label: name,
+        color: paletteColor(i),
+        data: this.withGaps(points.filter((p) => p.sensor === name).map((p) => [p.collected_at, p.avg])),
+      }))
+      if (limit && points.length) {
+        lines.push({ label: 'limit', color: '#d32f2f', dashed: true, data: [{ x: this.from, y: limit }, { x: this.to, y: limit }] })
+      }
+      return lines
+    },
+    // values for the summary card: now (last bucket) and the extremes of the period
+    sensorSummary(server) {
+      const result = {}
+      const temps = this.sensorBuckets(server, 'cpu_temp')
+      if (temps.length) {
+        const now = temps[temps.length - 1][1]
+        const hottest = Math.max(...now.map((p) => p.last))
+        const coolest = Math.min(...now.map((p) => p.last))
+        const peak = Math.max(...temps.flatMap(([, ps]) => ps.map((p) => p.max)))
+        const low = Math.min(...temps.flatMap(([, ps]) => ps.map((p) => p.min)))
+        const limit = Math.min(...now.map((p) => p.high || Infinity))
+        result.cpuTemp = this.celsius(hottest)
+        result.cpuTempDetail = `cores ${Math.round(coolest)}–${Math.round(hottest)}°C · period ${Math.round(low)}–${Math.round(peak)}°C`
+        result.cpuHot = isFinite(limit) && hottest >= limit - 5
+      }
+      const fans = this.sensorBuckets(server, 'fan')
+      if (fans.length) {
+        const now = fans[fans.length - 1][1]
+        const ambient = this.sensorBuckets(server, 'ambient_temp')
+        const ambientNow = ambient.length ? Math.max(...ambient[ambient.length - 1][1].map((p) => p.last)) : null
+        result.fan = this.rpm(Math.min(...now.map((p) => p.last)))
+        result.fanDetail = `slowest of ${now.length} · fastest ${this.rpm(Math.max(...now.map((p) => p.last)))}` + (ambientNow !== null ? ` · inlet air ${this.celsius(ambientNow)}` : '')
+      }
+      return result
     },
     celsius(v) {
       return v === null || v === undefined ? '-' : `${Math.round(v)}°C`
@@ -341,12 +481,22 @@ export default {
       return Promise.all([
         Promise.all(this.selected.map((server) => client.get('/metrics', { params: { server, from, to } }).then((response) => response.data))),
         Promise.all(withGpu.map((server) => client.get('/metrics/gpus/samples', { params: { server, from, to } }).then((response) => [server, response.data.hits]))),
+        // older backends have no sensors: no temperatures, not an error
+        Promise.all(
+          this.selected.map((server) =>
+            client
+              .get('/metrics/sensors', { params: { server, from, to } })
+              .then((response) => [server, response.data.hits])
+              .catch(() => [server, []])
+          )
+        ),
       ])
-        .then(([results, gpuResults]) => {
+        .then(([results, gpuResults, sensorResults]) => {
           const byServer = {}
           results.forEach((r) => (byServer[r.server] = r))
           this.results = byServer
           this.gpuResults = Object.fromEntries(gpuResults)
+          this.sensorResults = Object.fromEntries(sensorResults)
           this.from = from
           this.to = to
           if (results.length) this.step = results[0].step
@@ -474,6 +624,10 @@ export default {
 
     strong {
       font-size: 16px;
+    }
+
+    .hot strong {
+      color: #d32f2f;
     }
 
     small {
