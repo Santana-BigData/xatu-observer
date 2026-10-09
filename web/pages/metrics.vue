@@ -54,6 +54,7 @@
                 <div><span>network</span><strong>↓ {{ row.rx }}</strong><small>↑ {{ row.tx }}</small></div>
                 <div><span>load</span><strong>{{ row.load }}</strong><small>1m / 5m / 15m</small></div>
                 <div v-if="row.cpuTemp" :class="{ hot: row.cpuHot }"><span>cpu temp</span><strong>{{ row.cpuTemp }}</strong><small>{{ row.cpuTempDetail }}</small></div>
+                <div v-if="row.inlet" :class="{ hot: row.inletHot }"><span>inlet air</span><strong>{{ row.inlet }}</strong><small>{{ row.inletDetail }}</small></div>
                 <div v-if="row.fan"><span>fans</span><strong>{{ row.fan }}</strong><small>{{ row.fanDetail }}</small></div>
                 <div v-if="row.gpus"><span>gpu</span><strong>{{ row.gpuUtil }}</strong><small>{{ row.gpus }}× {{ row.gpuName }} · {{ row.gpuTemp }}</small></div>
               </div>
@@ -390,10 +391,18 @@ export default {
       const fans = this.sensorBuckets(server, 'fan')
       if (fans.length) {
         const now = fans[fans.length - 1][1]
-        const ambient = this.sensorBuckets(server, 'ambient_temp')
-        const ambientNow = ambient.length ? Math.max(...ambient[ambient.length - 1][1].map((p) => p.last)) : null
         result.fan = this.rpm(Math.min(...now.map((p) => p.last)))
-        result.fanDetail = `slowest of ${now.length} · fastest ${this.rpm(Math.max(...now.map((p) => p.last)))}` + (ambientNow !== null ? ` · inlet air ${this.celsius(ambientNow)}` : '')
+        result.fanDetail = `slowest of ${now.length} · fastest ${this.rpm(Math.max(...now.map((p) => p.last)))}`
+      }
+      const inlet = this.sensorBuckets(server, 'ambient_temp')
+      if (inlet.length) {
+        const now = Math.max(...inlet[inlet.length - 1][1].map((p) => p.last))
+        const low = Math.min(...inlet.flatMap(([, ps]) => ps.map((p) => p.min)))
+        const peak = Math.max(...inlet.flatMap(([, ps]) => ps.map((p) => p.max)))
+        result.inlet = this.celsius(now)
+        result.inletDetail = `period ${Math.round(low)}–${Math.round(peak)}°C`
+        // dell servers want the air inlet below 35°C
+        result.inletHot = now >= 35
       }
       return result
     },
