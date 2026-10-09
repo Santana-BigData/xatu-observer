@@ -16,14 +16,17 @@ class AlertRuleController(service: AlertRuleService, intervalSeconds: Long)(impl
 
   private val PreviewHours = 24
 
-  private def requestId: String = Contexts.local.get(RequestId).head.requestId
+  // read at the start of a route: the callbacks of a Future run without the request context
+  private def currentRequestId: String = Contexts.local.get(RequestId).map(_.requestId).getOrElse("")
 
   /** Metrics a rule can watch, with unit and suggested operator/threshold. */
   get("/api/alert-rules/metrics") { _: Request =>
+    val requestId = currentRequestId
     HitsResult(AlertMetric.All.length, AlertMetric.All)
   }
 
   get("/api/alert-rules") { _: Request =>
+    val requestId = currentRequestId
     logging.info(s"(x-request-id - $requestId) List alert rules route called...")
     val now = System.currentTimeMillis()
     service.getAll().flatMap { rules =>
@@ -33,6 +36,7 @@ class AlertRuleController(service: AlertRuleService, intervalSeconds: Long)(impl
   }
 
   get("/api/alert-rule/:id") { id: Id =>
+    val requestId = currentRequestId
     service.getById(id.id) flatMap {
       case Some(rule) => service.states(rule, System.currentTimeMillis()).map(s => response.ok(AlertRuleResponse(rule, s)))
       case None       => Future.successful(response.notFound(ServerMessage(s"Alert rule ${id.id} not found", requestId)))
@@ -41,6 +45,7 @@ class AlertRuleController(service: AlertRuleService, intervalSeconds: Long)(impl
 
   /** State now and what the rule would have alerted in the last 24 hours, for a rule being edited. */
   post("/api/alert-rules/preview") { r: NewAlertRule =>
+    val requestId = currentRequestId
     logging.info(s"(x-request-id - $requestId) Preview alert rule route called...")
     val rule = r.copy(name = if (r.name.trim.isEmpty) "preview" else r.name).toRule(0)
     NewAlertRule.validate(r.copy(name = rule.name)) match {
@@ -64,11 +69,13 @@ class AlertRuleController(service: AlertRuleService, intervalSeconds: Long)(impl
   }
 
   post("/api/alert-rule") { r: NewAlertRule =>
+    val requestId = currentRequestId
     logging.info(s"(x-request-id - $requestId) Create alert rule route called...")
     service.create(r) map { id => response.ok(Created(id, requestId)) }
   }
 
   put("/api/alert-rule/:id") { r: AlertRuleRequest =>
+    val requestId = currentRequestId
     logging.info(s"(x-request-id - $requestId) Update alert rule ${r.id} route called...")
     service.update(r.id, NewAlertRule(r.name, r.metric, r.server, r.operator, r.threshold, r.durationMinutes, r.enabled)) map { _ =>
       response.ok(ServerMessage(s"Updated alert rule ${r.id}", requestId))
@@ -76,6 +83,7 @@ class AlertRuleController(service: AlertRuleService, intervalSeconds: Long)(impl
   }
 
   delete("/api/alert-rule/:id") { id: Id =>
+    val requestId = currentRequestId
     logging.info(s"(x-request-id - $requestId) Delete alert rule ${id.id} route called...")
     service.delete(id.id) map {
       case true  => response.ok(Deleted(id.id, requestId))

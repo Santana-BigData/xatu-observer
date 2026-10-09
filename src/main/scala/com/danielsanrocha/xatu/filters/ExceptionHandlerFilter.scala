@@ -25,8 +25,6 @@ class ExceptionHandlerFilter extends SimpleFilter[Request, Response] {
       logging.debug(s"(x-request-id - $requestId) Response: ${response.getContentString}")
       response
     } rescue { case e: Throwable =>
-      logging.warn(s"(x-request-id - $requestId) Request failed, message: ${e.getMessage}")
-
       val statusCode = e match {
         case _: ForbiddenException        => 403
         case _: NotFoundException         => 404
@@ -37,6 +35,9 @@ class ExceptionHandlerFilter extends SimpleFilter[Request, Response] {
         case _: Exception                 => 500
         case _: Throwable                 => 500
       }
+      // an unexpected error (500) needs the stack trace to be found; a bad request does not
+      if (statusCode >= 500) logging.warn(s"(x-request-id - $requestId) Request failed, message: ${e.getMessage}", e)
+      else logging.warn(s"(x-request-id - $requestId) Request failed, message: ${e.getMessage}")
 
       val errorResponse = Response()
       errorResponse.statusCode = statusCode

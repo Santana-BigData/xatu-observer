@@ -6,9 +6,9 @@ case class AlertRuleRequest(
     @RouteParam id: Long,
     name: String,
     metric: String,
-    server: String = "",
+    server: String,
     operator: String,
     threshold: Double,
     durationMinutes: Int,
-    enabled: Boolean = true
+    enabled: Boolean
 )

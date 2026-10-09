@@ -24,7 +24,8 @@ class ScriptController(implicit service: ScriptService, implicit val statusRepos
     if (Contexts.local.get(ApiTokenAuth).isDefined) Future.failed(new ForbiddenException("Scripts are changed with a login session, not with an api token"))
     else f
 
-  private def who: String = Contexts.local.get(TimedCredential).map(_.email).getOrElse("?")
+  // read at the start of a route: the callbacks of a Future run without the request context
+  private def currentUser: String = Contexts.local.get(TimedCredential).map(_.email).getOrElse("?")
 
   get("/api/script/:id") { id: Id =>
     val requestId = Contexts.local.get(RequestId).head.requestId
@@ -36,6 +37,7 @@ class ScriptController(implicit service: ScriptService, implicit val statusRepos
   }
 
   post("/api/script") { s: NewScript =>
+    val who = currentUser
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) POST script route called by $who...")
     requireSession(service.create(s)) map { id =>
@@ -45,6 +47,7 @@ class ScriptController(implicit service: ScriptService, implicit val statusRepos
   }
 
   put("/api/script/:id") { s: ScriptRequest =>
+    val who = currentUser
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) PUT script/:id route called by $who...")
     requireSession(service.update(s.id, NewScript(s.name, s.script, s.intervalSeconds, s.timeoutSeconds))) map {
@@ -56,6 +59,7 @@ class ScriptController(implicit service: ScriptService, implicit val statusRepos
   }
 
   delete("/api/script/:id") { id: Id =>
+    val who = currentUser
     val requestId = Contexts.local.get(RequestId).head.requestId
     logging.info(s"(x-request-id - $requestId) Delete script route called by $who...")
     requireSession(service.delete(id.id)) map {
