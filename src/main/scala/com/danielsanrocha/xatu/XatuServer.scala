@@ -47,6 +47,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
   implicit val serviceRepository: ServiceRepository = new ServiceRepositoryImpl()
   implicit val apiRepository: APIRepository = new APIRepositoryImpl()
   implicit val containerRepository: ContainerRepository = new ContainerRepositoryImpl()
+  implicit val scriptRepository: ScriptRepository = new ScriptRepositoryImpl()
 
   logging.info("Creating services...")
   private implicit val userService: UserService = new UserServiceImpl()
@@ -54,6 +55,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
   private implicit val apiService: APIService = new APIServiceImpl()
   private implicit val logService: LogService = new LogServiceImpl()
   private implicit val containerService: ContainerService = new ContainerServiceImpl()
+  private implicit val scriptService: ScriptService = new ScriptServiceImpl()
 
   logging.info("Getting api configuration...")
   private val authorizationHeader = conf.getString("api.auth.header")
@@ -71,6 +73,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
   private val apiController = new APIController()
   private val logController = new LogController()
   private val containerController = new ContainerController()
+  private val scriptController = new ScriptController()
   private val corsController = new CORSController()
   private val webController = new WebController()
 
@@ -98,6 +101,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
       .add(authorizeFilter, apiController)
       .add(authorizeFilter, logController)
       .add(authorizeFilter, containerController)
+      .add(authorizeFilter, scriptController)
       .add(authorizeFilter, greatManager.statusController)
       .add(authorizeFilter, greatManager.metricsController)
       .add(authorizeFilter, greatManager.containerMetricsController)

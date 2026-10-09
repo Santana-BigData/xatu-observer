@@ -14,6 +14,9 @@ import com.danielsanrocha.xatu.models.internals.{SentAlert, ServerCheck, XatuSer
 trait StatusRepository {
   def save(check: ServerCheck): Unit
 
+  /** Saves a check that is valid for at least `validForSeconds` (checks made less often than the default ttl). */
+  def save(check: ServerCheck, validForSeconds: Long): Unit
+
   /** Current checks of a kind, grouped by target id. */
   def checks(kind: String): Map[Long, Seq[ServerCheck]]
 

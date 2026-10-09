@@ -2,7 +2,7 @@ package com.danielsanrocha.xatu
 
 import com.danielsanrocha.xatu.commons.{ContainerStatsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
 import com.danielsanrocha.xatu.controllers.{ContainerMetricsController, GpuMetricsController, MetricsController, StatusController}
-import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ServiceObserverManager}
+import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ScriptObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
   APIRepository,
   APIRepositoryImpl,
@@ -20,6 +20,8 @@ import com.danielsanrocha.xatu.repositories.{
   MetricsRepositoryDummyImpl,
   MetricsRepositoryImpl,
   CassandraSession,
+  ScriptRepository,
+  ScriptRepositoryImpl,
   ServiceRepository,
   ServiceRepositoryImpl,
   StatusRepository,
@@ -27,7 +29,18 @@ import com.danielsanrocha.xatu.repositories.{
   UserRepository,
   UserRepositoryImpl
 }
-import com.danielsanrocha.xatu.services.{APIService, APIServiceImpl, ContainerService, ContainerServiceImpl, LogService, LogServiceImpl, ServiceService, ServiceServiceImpl}
+import com.danielsanrocha.xatu.services.{
+  APIService,
+  APIServiceImpl,
+  ContainerService,
+  ContainerServiceImpl,
+  LogService,
+  LogServiceImpl,
+  ScriptService,
+  ScriptServiceImpl,
+  ServiceService,
+  ServiceServiceImpl
+}
 import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.core.DockerClientBuilder
 import com.typesafe.scalalogging.Logger
@@ -45,6 +58,7 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   implicit val serviceRepository: ServiceRepository = new ServiceRepositoryImpl()
   implicit val apiRepository: APIRepository = new APIRepositoryImpl()
   implicit val containerRepository: ContainerRepository = new ContainerRepositoryImpl()
+  implicit val scriptRepository: ScriptRepository = new ScriptRepositoryImpl()
   private implicit val conf: Config = ConfigFactory.load()
 
   implicit val logRepository: LogRepository =
@@ -81,6 +95,7 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   private implicit val apiService: APIService = new APIServiceImpl()
   private implicit val logService: LogService = new LogServiceImpl()
   private implicit val containerService: ContainerService = new ContainerServiceImpl()
+  private implicit val scriptService: ScriptService = new ScriptServiceImpl()
 
   logging.info("Loading configuration file and accessing it...")
 
@@ -89,6 +104,7 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   private implicit val logServiceManager: LogServiceObserverManager = new LogServiceObserverManager()
   private implicit val serviceObserverManager: ServiceObserverManager = new ServiceObserverManager(server, statusRepository)
   private implicit val logContainerManager: LogContainerObserverManager = new LogContainerObserverManager()
+  private val scriptObserverManager: ScriptObserverManager = new ScriptObserverManager(server, statusRepository)
 
   private val managersEnable = conf.getBoolean("managers.enabled")
 
@@ -110,6 +126,7 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
         serviceRepository,
         apiRepository,
         containerRepository,
+        scriptRepository,
         metricsRepository,
         conf.getLong("telegram.repeat_minutes"),
         conf.getLong("telegram.agent_stale_minutes"),
@@ -147,6 +164,7 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
       logServiceManager.start()
       serviceObserverManager.start()
       logContainerManager.start()
+      scriptObserverManager.start()
       new ContainerStatusCollector(server, containerRepository, dockerClient, statusRepository, clusterPeriod).start()
     }
   }

@@ -3,7 +3,7 @@ package com.danielsanrocha.xatu
 import com.danielsanrocha.xatu.commons.StatusRules
 import com.danielsanrocha.xatu.commons.StatusRules.Target
 import com.danielsanrocha.xatu.models.internals.{CheckKind, SentAlert}
-import com.danielsanrocha.xatu.repositories.{APIRepository, ContainerRepository, MetricsRepository, ServiceRepository, StatusRepository}
+import com.danielsanrocha.xatu.repositories.{APIRepository, ContainerRepository, MetricsRepository, ScriptRepository, ServiceRepository, StatusRepository}
 import com.typesafe.scalalogging.Logger
 import scalaj.http.{Http, HttpOptions}
 
@@ -23,6 +23,7 @@ class TelegramNotifier(
     serviceRepository: ServiceRepository,
     apiRepository: APIRepository,
     containerRepository: ContainerRepository,
+    scriptRepository: ScriptRepository,
     metricsRepository: MetricsRepository,
     repeatMinutes: Long,
     agentStaleMinutes: Long,
@@ -39,16 +40,18 @@ class TelegramNotifier(
       services <- serviceRepository.getAll(1000, 0)
       apis <- apiRepository.getAll(1000, 0)
       containers <- containerRepository.getAll(1000, 0)
+      scripts <- scriptRepository.getAll(1000, 0)
     } yield services.map(s => Target(CheckKind.Service, s.id, s.name)) ++
       apis.map(a => Target(CheckKind.API, a.id, a.name)) ++
-      containers.map(c => Target(CheckKind.Container, c.id, c.name))
+      containers.map(c => Target(CheckKind.Container, c.id, c.name)) ++
+      scripts.map(s => Target(CheckKind.Script, s.id, s.name))
     Await.result(all, 30.seconds)
   }
 
   override protected def run(): Unit =
     if (!leader.isLeader) logging.debug("Not the leader, not sending notifications.")
     else {
-      val checks = Seq(CheckKind.Service, CheckKind.API, CheckKind.Container).map(k => k -> statusRepository.checks(k)).toMap
+      val checks = Seq(CheckKind.Service, CheckKind.API, CheckKind.Container, CheckKind.Script).map(k => k -> statusRepository.checks(k)).toMap
       val now = System.currentTimeMillis()
       val xatuServers = statusRepository.servers()
       val agents = Await.result(metricsRepository.servers(), 30.seconds)

@@ -1,7 +1,7 @@
 package com.danielsanrocha.xatu.models.responses
 
 import com.danielsanrocha.xatu.commons.StatusRules
-import com.danielsanrocha.xatu.models.internals.{API, CheckKind, ServerCheck, Service}
+import com.danielsanrocha.xatu.models.internals.{API, CheckKind, Script, ServerCheck, Service}
 
 import java.sql.Timestamp
 
@@ -42,5 +42,25 @@ object APIResponse {
   def apply(a: API, checks: Map[Long, Seq[ServerCheck]]): APIResponse = {
     val servers = checks.getOrElse(a.id, Seq()).sortBy(_.server)
     APIResponse(a.id, a.name, a.host, a.port, a.healthcheckRoute, StatusRules.aggregate(CheckKind.API, servers), a.createDate, a.updateDate, servers)
+  }
+}
+
+/** Script with the status aggregated from every server and the last run of each one. */
+case class ScriptResponse(
+    id: Long,
+    name: String,
+    script: String,
+    intervalSeconds: Int,
+    timeoutSeconds: Int,
+    status: Char,
+    createDate: Timestamp,
+    updateDate: Timestamp,
+    servers: Seq[ServerCheck]
+)
+
+object ScriptResponse {
+  def apply(s: Script, checks: Map[Long, Seq[ServerCheck]]): ScriptResponse = {
+    val servers = checks.getOrElse(s.id, Seq()).sortBy(_.server)
+    ScriptResponse(s.id, s.name, s.script, s.intervalSeconds, s.timeoutSeconds, StatusRules.aggregate(CheckKind.Script, servers), s.createDate, s.updateDate, servers)
   }
 }

@@ -34,12 +34,15 @@ abstract class Observer[DATA <: Data](d: DATA) {
 
   val task: Runnable
 
+  /** Seconds between two runs of the task. */
+  protected def periodSeconds: Long = 10
+
   private val ex = new ScheduledThreadPoolExecutor(1)
 
   var interval: Option[ScheduledFuture[_]] = None
 
   def start(): Unit = {
     logging.info(s"Starting Observer for Data with id ${_data.id} and name ${_data.name}")
-    interval = Some(ex.scheduleAtFixedRate(task, 10, 10, TimeUnit.SECONDS))
+    interval = Some(ex.scheduleAtFixedRate(task, 10, periodSeconds, TimeUnit.SECONDS))
   }
 }

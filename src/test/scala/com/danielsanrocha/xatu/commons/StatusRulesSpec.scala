@@ -55,6 +55,16 @@ class StatusRulesSpec extends UnitSpec {
       }
     }
 
+    it("should name the server where a script failed") {
+      Future {
+        val checks = Map("script" -> Map(5L -> Seq(check("script", 5, "s1", 'F', Some("exit 1: disk full")), check("script", 5, "s2", 'W'))))
+        StatusRules.problems(Seq(Target("script", 5, "backup")), checks, alive) should equal(
+          Seq(Problem("script::5::s1", "Script backup failed on s1 (exit 1: disk full)"))
+        )
+        StatusRules.aggregate(CheckKind.Script, checks("script")(5L)) should equal('F')
+      }
+    }
+
     it("should alert an api only when most servers fail, listing them") {
       Future {
         val one = Map("api" -> Map(3L -> Seq(check("api", 3, "s1", 'W'), check("api", 3, "s2", 'W'), check("api", 3, "s3", 'F'))))

@@ -133,6 +133,10 @@ object Main extends App {
         logging.info("Creating tb_api_tokens table...")
         val apiTokensQuery = Source.fromResource("queries/CreateApiTokensTable.sql").mkString
         Await.result(client.run(sqlu"#$apiTokensQuery"), atMost = 10 second)
+
+        logging.info("Creating tb_scripts table...")
+        val scriptsQuery = Source.fromResource("queries/CreateScriptsTable.sql").mkString
+        Await.result(client.run(sqlu"#$scriptsQuery"), atMost = 10 second)
         logging.info("Created!\n")
 
       case "createIndex" =>

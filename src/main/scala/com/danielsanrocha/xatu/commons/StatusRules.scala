@@ -7,7 +7,7 @@ object StatusRules {
 
   /**
    * Status of a target from the checks of all servers. 'U' when no server checked it.
-   * Services and containers run on specific servers: any failing server fails it.
+   * Services, containers and scripts run on specific servers: any failing server fails it.
    * APIs are the same url checked from every server: it fails only when most servers
    * fail, a single failing server is its own network problem.
    */
@@ -29,6 +29,7 @@ object StatusRules {
   private def label(kind: String) = kind match {
     case CheckKind.API       => "API"
     case CheckKind.Container => "Container"
+    case CheckKind.Script    => "Script"
     case _                   => "Service"
   }
 
@@ -51,12 +52,13 @@ object StatusRules {
             )
           else Seq()
         case kind =>
-          failing.map(c => Problem(s"$kind::${t.id}::${c.server}", s"${label(kind)} ${t.name} is not running on ${c.server}${detail(c)}"))
+          val what = if (kind == CheckKind.Script) "failed on" else "is not running on"
+          failing.map(c => Problem(s"$kind::${t.id}::${c.server}", s"${label(kind)} ${t.name} $what ${c.server}${detail(c)}"))
       }
     }
 
     val downServers = servers.filterNot(_.alive).map { s =>
-      Problem(s"server::${s.server}", s"Xatu on ${s.server} stopped reporting, its services and containers are not being checked")
+      Problem(s"server::${s.server}", s"Xatu on ${s.server} stopped reporting, its services, containers and scripts are not being checked")
     }
 
     targetProblems ++ downServers

@@ -4,7 +4,7 @@ package com.danielsanrocha.xatu.models.internals
  * Result of one check made by one server. Each Xatu writes only its own checks, so
  * servers never overwrite each other (they used to share the status column in mariadb).
  *
- * kind: "service", "api" or "container". status: 'W' working, 'F' failing.
+ * kind: "service", "api", "container" or "script". status: 'W' working, 'F' failing.
  */
 case class ServerCheck(
     kind: String,
@@ -29,4 +29,5 @@ object CheckKind {
   val Service = "service"
   val API = "api"
   val Container = "container"
+  val Script = "script"
 }

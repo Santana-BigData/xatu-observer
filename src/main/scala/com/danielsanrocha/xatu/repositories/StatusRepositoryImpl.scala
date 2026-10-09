@@ -31,8 +31,10 @@ class StatusRepositoryImpl(pool: Pool[Jedis], ttlSeconds: Long) extends StatusRe
     if (keys.isEmpty) Seq()
     else keys.zip(redis.mget(keys: _*).asScala).collect { case (k, v) if v != null => (k, v) }
 
-  override def save(check: ServerCheck): Unit = withRedis {
-    _.setex(statusKey(check.kind, check.targetId, check.server), ttlSeconds, toJson(check))
+  override def save(check: ServerCheck): Unit = save(check, ttlSeconds)
+
+  override def save(check: ServerCheck, validForSeconds: Long): Unit = withRedis {
+    _.setex(statusKey(check.kind, check.targetId, check.server), math.max(ttlSeconds, validForSeconds), toJson(check))
   }
 
   override def checks(kind: String): Map[Long, Seq[ServerCheck]] = withRedis { redis =>
