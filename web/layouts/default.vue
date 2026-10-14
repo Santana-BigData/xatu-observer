@@ -43,6 +43,9 @@
               <v-icon>mdi-bell-alert-outline</v-icon>&nbsp;<a href="/alerts">Alerts</a>
             </v-list-item>
             <v-list-item>
+              <v-icon>mdi-cellphone-message</v-icon>&nbsp;<a href="/telegram">Telegram</a>
+            </v-list-item>
+            <v-list-item>
               <v-icon>mdi-key-variant</v-icon>&nbsp;<a href="/tokens">Tokens</a>
             </v-list-item>
             <v-list-item>
