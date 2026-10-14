@@ -19,6 +19,7 @@ API HTTP/JSON do Xatu: uso de CPU, memória, rede e disco dos containers Docker 
 3. [Servidores](#servidores)
 4. [Temperaturas e ventoinhas](#temperaturas-e-ventoinhas)
 5. [Regras de alerta](#regras-de-alerta)
+   - [Quem recebe no Telegram](#quem-recebe-no-telegram)
 6. [Status de services, APIs, containers e scripts](#status-de-services-apis-containers-e-scripts)
 7. [Logs](#logs)
 8. [Tokens](#tokens)
@@ -260,6 +261,20 @@ Uma regra alerta no Telegram quando uma métrica de um servidor fica **acima** (
 | `POST /alert-rule` | Cria: `{"name": "cpu quente", "metric": "cpu_temp", "server": "", "operator": "above", "threshold": 80, "duration_minutes": 5, "enabled": true}`. `server` vazio = todos. |
 | `PUT /alert-rule/<id>` / `DELETE /alert-rule/<id>` | Edita / remove. |
 | `POST /alert-rules/preview` | Mesmo corpo do `POST`, sem salvar: estado agora e quantas vezes a regra teria alertado nas últimas 24h em cada servidor. |
+
+### Quem recebe no Telegram
+
+Todo alerta vai para o chat do `TELEGRAM_CHAT_ID` (fixo no serviço) e para cada chat ativo cadastrado na tela **Telegram**. Um chat que falha (bloqueou o bot, id errado) não impede os outros de receber.
+
+| Rota | Descrição |
+|---|---|
+| `GET /telegram/chats` | `primary` (o `TELEGRAM_CHAT_ID`), `bot` (usuário do bot) e os chats cadastrados (`name`, `chat_id`, `enabled`). |
+| `POST /telegram/chat` | Cadastra: `{"name": "Celular da Ana", "chat_id": "5512345678", "enabled": true}`. |
+| `PUT /telegram/chat/<id>` / `DELETE /telegram/chat/<id>` | Edita (por exemplo, pausa com `enabled: false`) / remove. |
+| `POST /telegram/test` | Manda uma mensagem de teste: `{"chat_id": "5512345678"}`. |
+| `GET /telegram/recent-chats` | Quem mandou mensagem ao bot nas últimas 24h, com o `chat_id`: é assim que se descobre o id de um celular novo (ele precisa mandar `/start` ao bot antes). |
+
+O `chat_id` é o número do chat no Telegram, não o número do telefone. Cadastrar, editar, remover, testar e ver os chats recentes só funciona com login na interface (com token, `403`), para um token vazado não conseguir colocar alguém para receber os alertas.
 
 ---
 

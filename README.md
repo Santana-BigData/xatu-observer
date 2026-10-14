@@ -154,6 +154,10 @@ xatu ALL=(root) NOPASSWD: /usr/bin/ipmitool sdr elist full
 
 Without ipmitool or the rule, only the cpu temperatures are collected. The "Metrics" page shows them, and the "Alerts" page has rules like "CPU temperature above 80°C for more than 5 minutes" (also gpu temperature, inlet air, fan speed, cpu, memory and disk usage), on one or all servers. With many sensors (cores, gpus, fans) any of them passing the value counts, even a different one each minute, with a preview of what the rule would have alerted in the last 24 hours. The leader evaluates the rules every minute and sends them to telegram like the other alerts (table `tb_alert_rules`, created by `createTables`).
 
+## Telegram recipients
+
+Alerts go to `TELEGRAM_CHAT_ID` and to every enabled chat of the "Telegram" page (table `tb_telegram_chats`, created by `createTables`). To add a phone, send `/start` to the bot from it, then on the page use "find chat id" (the chats that wrote to the bot in the last 24 hours) and "send test". A chat that fails does not stop the others. Only a login session can change the recipients.
+
 ## Scripts
 
 Bash scripts registered in the "Scripts" page (table `tb_scripts`, created by `createTables`) run on every server where the managers are enabled, once every `interval_seconds` (at least 10), with `bash -c` as the user of the Xatu service and stdin from `/dev/null`. A run fails when it exits with a code other than 0 or lasts more than `timeout_seconds` (it is killed with its children); the status shows the exit code and the last lines printed, and the failure is alerted on telegram like a stopped service ("Script X failed on SERVER (exit 1: ...)"). The scripts get `XATU_SERVER` and `XATU_SCRIPT_NAME` in the environment. Runs of the same script never overlap.
