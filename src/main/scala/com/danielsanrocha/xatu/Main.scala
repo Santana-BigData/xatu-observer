@@ -145,6 +145,10 @@ object Main extends App {
         logging.info("Creating tb_alert_rules table...")
         val alertRulesQuery = Source.fromResource("queries/CreateAlertRulesTable.sql").mkString
         Await.result(client.run(sqlu"#$alertRulesQuery"), atMost = 10 second)
+
+        logging.info("Creating tb_telegram_chats table...")
+        val telegramChatsQuery = Source.fromResource("queries/CreateTelegramChatsTable.sql").mkString
+        Await.result(client.run(sqlu"#$telegramChatsQuery"), atMost = 10 second)
         logging.info("Created!\n")
 
       case "createIndex" =>

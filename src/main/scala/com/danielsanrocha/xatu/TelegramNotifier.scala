@@ -1,12 +1,11 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.StatusRules
+import com.danielsanrocha.xatu.commons.{StatusRules, TelegramClient}
 import com.danielsanrocha.xatu.commons.StatusRules.Target
-import com.danielsanrocha.xatu.models.internals.{CheckKind, SentAlert}
+import com.danielsanrocha.xatu.models.internals.{CheckKind, SentAlert, TelegramChat}
 import com.danielsanrocha.xatu.services.AlertRuleService
-import com.danielsanrocha.xatu.repositories.{APIRepository, ContainerRepository, MetricsRepository, ScriptRepository, ServiceRepository, StatusRepository}
+import com.danielsanrocha.xatu.repositories.{APIRepository, ContainerRepository, MetricsRepository, ScriptRepository, ServiceRepository, StatusRepository, TelegramChatRepository}
 import com.typesafe.scalalogging.Logger
-import scalaj.http.{Http, HttpOptions}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
@@ -15,10 +14,13 @@ import scala.concurrent.{Await, ExecutionContext}
  * Sends the problems of every server to telegram. Every Xatu runs it, but only the
  * leader sends, so each alert goes once. Alerts are repeated every `repeatMinutes`
  * while the problem lasts, and a "resolved" message is sent when it is gone.
+ *
+ * Every alert goes to TELEGRAM_CHAT_ID and to the enabled chats of tb_telegram_chats.
  */
 class TelegramNotifier(
-    token: String,
+    telegram: TelegramClient,
     chatId: String,
+    chatRepository: TelegramChatRepository,
     leader: LeaderElection,
     statusRepository: StatusRepository,
     serviceRepository: ServiceRepository,
@@ -79,15 +81,25 @@ class TelegramNotifier(
       }
     }
 
+  /**
+   * Sends to every recipient. A chat that fails (blocked the bot, wrong id) does not stop
+   * the others; only when all fail it throws, so the alert is tried again next round.
+   */
   private def notify(text: String): Unit = {
     logging.debug(s"TelegramNotifier message: $text")
-    val result = Http(s"https://api.telegram.org/bot$token/sendMessage")
-      .param("chat_id", chatId)
-      .param("text", text)
-      .option(HttpOptions.connTimeout(10000))
-      .option(HttpOptions.readTimeout(10000))
-      .execute()
-
-    if (result.code != 200) throw new Exception(s"Error sending message to telegram! Status ${result.code}")
+    val chats =
+      try Await.result(chatRepository.getAll(), 30.seconds)
+      catch { case e: Exception => logging.error(s"Could not read tb_telegram_chats, sending only to TELEGRAM_CHAT_ID: ${e.getMessage}"); Seq() }
+    val recipients = TelegramNotifier.recipients(chatId, chats)
+    val failures = recipients.flatMap(r => telegram.send(r, text).left.toOption.map(r -> _))
+    failures.foreach { case (r, reason) => logging.error(s"Could not send the alert to telegram chat $r: $reason") }
+    if (recipients.nonEmpty && failures.size == recipients.size) throw new Exception(s"Error sending message to telegram: ${failures.head._2}")
   }
+}
+
+object TelegramNotifier {
+
+  /** TELEGRAM_CHAT_ID first, then the enabled chats, without repeating a chat. */
+  def recipients(primary: String, chats: Seq[TelegramChat]): Seq[String] =
+    (Option(primary).map(_.trim).filter(_.nonEmpty).toSeq ++ chats.filter(_.enabled).map(_.chatId.trim)).distinct
 }

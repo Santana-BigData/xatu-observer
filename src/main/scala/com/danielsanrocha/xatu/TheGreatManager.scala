@@ -1,7 +1,7 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.{AlertMetricSeries, ContainerStatsReader, HardwareSensorsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
-import com.danielsanrocha.xatu.controllers.{AlertRuleController, ContainerMetricsController, GpuMetricsController, MetricsController, SensorsController, StatusController}
+import com.danielsanrocha.xatu.commons.{AlertMetricSeries, TelegramClient, ContainerStatsReader, HardwareSensorsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
+import com.danielsanrocha.xatu.controllers.{TelegramChatController, AlertRuleController, ContainerMetricsController, GpuMetricsController, MetricsController, SensorsController, StatusController}
 import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ScriptObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
   APIRepository,
@@ -21,6 +21,8 @@ import com.danielsanrocha.xatu.repositories.{
   MetricsRepositoryImpl,
   CassandraSession,
   AlertRuleRepositoryImpl,
+  TelegramChatRepository,
+  TelegramChatRepositoryImpl,
   SensorsRepository,
   SensorsRepositoryDummyImpl,
   SensorsRepositoryImpl,
@@ -116,6 +118,9 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   private val managersEnable = conf.getBoolean("managers.enabled")
 
   private val token = conf.getString("telegram.bot_token")
+  private val telegram = new TelegramClient(token)
+  private val primaryChatId = if (conf.hasPath("telegram.chat_id")) conf.getString("telegram.chat_id") else ""
+  private val telegramChatRepository: TelegramChatRepository = new TelegramChatRepositoryImpl()
   val metricsInterval: Int = conf.getInt("metrics.interval_seconds")
 
   val alertRuleService = new AlertRuleService(
@@ -132,8 +137,9 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
     if (token != "inactive") {
       logging.info("Starting TelegramNotifier (only the leader sends)...")
       new TelegramNotifier(
-        token,
-        conf.getString("telegram.chat_id"),
+        telegram,
+        primaryChatId,
+        telegramChatRepository,
         leaderElection,
         statusRepository,
         serviceRepository,
@@ -193,4 +199,5 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
   val gpuMetricsController = new GpuMetricsController(metricsInterval)
   val sensorsController = new SensorsController(metricsInterval)
   val alertRuleController = new AlertRuleController(alertRuleService, metricsInterval)
+  val telegramChatController = new TelegramChatController(telegram, primaryChatId, telegramChatRepository)
 }

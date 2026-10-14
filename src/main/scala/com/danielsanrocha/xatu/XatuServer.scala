@@ -108,6 +108,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
       .add(authorizeFilter, greatManager.gpuMetricsController)
       .add(authorizeFilter, greatManager.sensorsController)
       .add(authorizeFilter, greatManager.alertRuleController)
+      .add(authorizeFilter, greatManager.telegramChatController)
       .add(authorizeFilter, apiTokenController)
       .add(healthcheckController)
       .add(webController)
