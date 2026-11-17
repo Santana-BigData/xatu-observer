@@ -8,7 +8,7 @@ import com.github.dockerjava.api.command.PingCmd
 import com.twitter.finagle.http.Status
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.anyString
-import org.mockito.Mockito.{times, verify, when}
+import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatestplus.mockito.MockitoSugar.mock
 import redis.clients.jedis.Jedis
 import redis.clients.jedis.util.Pool
@@ -52,6 +52,27 @@ class HealthcheckControllerSpec extends UnitSpec with TestController with TestRe
         response.docker should equal("Ok")
         response.elasticsearch should equal("Ok")
         response.cassandra should equal("Inactive")
+      }
+    }
+
+    it("should report a server without docker as not installed, not as a failure") {
+      val cache: Jedis = mock[Jedis]
+      implicit val cachePool: Pool[Jedis] = mock[Pool[Jedis]]
+      implicit val dockerClient: DockerClient = mock[DockerClient]
+      implicit val logRepository: LogRepository = mock[LogRepository]
+
+      val randomCapture: ArgumentCaptor[String] = ArgumentCaptor.forClass(classOf[String])
+      when(cachePool.getResource).thenReturn(cache)
+      when(cache.set(anyString(), randomCapture.capture)).thenReturn("OK")
+      when(cache.get("xatu::random")).thenAnswer(_ => randomCapture.getValue)
+      when(logRepository.status()).thenReturn(Future())
+
+      val server = createServer(new HealthcheckController(dockerAvailable = false))
+
+      Future {
+        server.httpGetJson[ServerStatus]("/api/healthcheck", andExpect = Status.Ok).docker should equal("Not installed")
+        verify(dockerClient, never()).pingCmd()
+        succeed
       }
     }
 

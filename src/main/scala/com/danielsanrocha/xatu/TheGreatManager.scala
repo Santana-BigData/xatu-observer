@@ -1,6 +1,6 @@
 package com.danielsanrocha.xatu
 
-import com.danielsanrocha.xatu.commons.{AlertMetricSeries, TelegramClient, ContainerStatsReader, HardwareSensorsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
+import com.danielsanrocha.xatu.commons.{AlertMetricSeries, DockerAvailability, TelegramClient, ContainerStatsReader, HardwareSensorsReader, NvidiaSmiReader, RedisPool, SystemMetricsReader}
 import com.danielsanrocha.xatu.controllers.{TelegramChatController, AlertRuleController, ContainerMetricsController, GpuMetricsController, MetricsController, SensorsController, StatusController}
 import com.danielsanrocha.xatu.managers.{APIObserverManager, LogContainerObserverManager, LogServiceObserverManager, ScriptObserverManager, ServiceObserverManager}
 import com.danielsanrocha.xatu.repositories.{
@@ -175,6 +175,8 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
       ContainerStatsReader.dockerUrl(sys.env.get("DOCKER_HOST")) match {
         case Some(url) =>
           new ContainerMetricsCollector(new ContainerStatsReader(server, url), containerMetricsRepository, metricsInterval).start()
+        case None if !DockerAvailability.onThisServer =>
+          logging.info("No docker on this server, docker container metrics are not collected.")
         case None =>
           logging.warn("DOCKER_HOST is not a tcp address (e.g. tcp://127.0.0.1:2375), docker container metrics are not collected.")
       }
@@ -187,9 +189,12 @@ class TheGreatManager(implicit val client: Database, implicit val ec: ExecutionC
       apiObserverManager.start()
       logServiceManager.start()
       serviceObserverManager.start()
-      logContainerManager.start()
       scriptObserverManager.start()
-      new ContainerStatusCollector(server, containerRepository, dockerClient, statusRepository, clusterPeriod).start()
+      // without docker every container check would only log an error every few seconds
+      if (DockerAvailability.onThisServer) {
+        logContainerManager.start()
+        new ContainerStatusCollector(server, containerRepository, dockerClient, statusRepository, clusterPeriod).start()
+      } else logging.info("No docker on this server (no DOCKER_HOST nor /var/run/docker.sock), containers are not checked here.")
     }
   }
 

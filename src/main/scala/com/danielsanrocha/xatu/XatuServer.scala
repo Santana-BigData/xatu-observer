@@ -65,7 +65,7 @@ class XatuServer(implicit val client: Database, implicit val ec: scala.concurren
   logging.info("Instantiating controllers...")
   private val indexController = new IndexController()
   implicit val healthcheckTimeout: FiniteDuration = new FiniteDuration(conf.getInt("api.healthcheck_timeout"), TimeUnit.MILLISECONDS)
-  private val healthcheckController = new HealthcheckController()
+  private val healthcheckController = new HealthcheckController(com.danielsanrocha.xatu.commons.DockerAvailability.onThisServer)
   private val notFoundController = new NotFoundController()
   private val loginController = new LoginController()
   private val userController = new UserController()

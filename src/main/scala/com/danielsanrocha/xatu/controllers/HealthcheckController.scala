@@ -17,7 +17,8 @@ import slick.jdbc.MySQLProfile.api._
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-class HealthcheckController(
+/** `dockerAvailable` false: the server has no docker, reported as "Not installed" and not as a failure. */
+class HealthcheckController(dockerAvailable: Boolean = true)(
     implicit val cachePool: Pool[Jedis],
     implicit val client: Database,
     implicit val dockerClient: DockerClient,
@@ -60,13 +61,16 @@ class HealthcheckController(
       Some(e)
     }
 
-    val dockerFuture = Future[Option[Throwable]] {
-      dockerClient.pingCmd().exec()
-      None
-    } withTimeout (ec, timeout) recover { case e: Throwable =>
-      logging.error(s"Error accessing Docker! Message: ${e.getMessage}")
-      Some(e)
-    }
+    val dockerFuture =
+      if (!dockerAvailable) Future.successful(None)
+      else
+        Future[Option[Throwable]] {
+          dockerClient.pingCmd().exec()
+          None
+        } withTimeout (ec, timeout) recover { case e: Throwable =>
+          logging.error(s"Error accessing Docker! Message: ${e.getMessage}")
+          Some(e)
+        }
 
     val elasticsearchFuture = logRepository.status() map { _ =>
       None
@@ -94,8 +98,9 @@ class HealthcheckController(
         case None    => "Ok"
       }
       val docker = result(2) match {
-        case Some(e) => flag = true; e.getMessage
-        case None    => "Ok"
+        case Some(e)                  => flag = true; e.getMessage
+        case None if !dockerAvailable => "Not installed"
+        case None                     => "Ok"
       }
       val elasticsearch = result(3) match {
         case Some(e) => flag = true; e.getMessage
